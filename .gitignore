@@ -1,0 +1,22 @@
+# Local datasets
+/02_data/raw/*
+!/02_data/raw/.gitkeep
+
+# Reproducible tool outputs
+/99_build/*
+!/99_build/.gitkeep
+
+# Packaged submission copies
+/08_submission/*
+!/08_submission/.gitkeep
+
+# Keep run summaries and NPZ/HEX test data; ignore other generated details.
+/07_runs/**/*
+!/07_runs/**/
+!/07_runs/**/*.npz
+!/07_runs/**/*.hex
+!/07_runs/*/manifest.json
+!/07_runs/*/config.yaml
+!/07_runs/*/metrics.json
+!/07_runs/*/README.md
+!/07_runs/*/.gitkeep

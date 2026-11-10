@@ -1,0 +1,5 @@
+# Preserve exact golden bytes so manifest SHA-256 checks survive checkout.
+07_runs/**/*.hex -text whitespace=cr-at-eol
+07_runs/**/*.npz -text
+07_runs/**/*.vh -text
+05_tb/**/*.vh -text
