@@ -1,5 +1,7 @@
 # RTL 검증 계획
 
+> **2026-11-10 명세 개정:** MAC 입력·가중치 레지스터 1단을 추가해 데이터·valid 경로를 3단으로 변경했다. MAC·Control RTL과 검증환경 코드를 3단 명세에 맞게 수정했고 새 검증 데이터·헤더 5종을 생성했다. 생성기 내부 검사는 PASS했지만 새 RTL의 테스트·시뮬레이션·합성·배치배선은 아직 실행하지 않았다. [변경 범위와 일정](mac_input_pipeline.md)을 따른다. 기존 실행 기록은 이전 구조의 이력으로 보존한다.
+
 이 문서는 TB·tester·데이터 헤더와 Python golden 생성기의 구성 및 검증 원칙을 기록한다. 하드웨어 구조·포트·수치 설정·파이프라인 일정은 [architecture.md](architecture.md)를 기준으로 한다. 아직 정하지 않은 실행 조건은 8절에 구분한다.
 
 ## 1. 검증 방식
@@ -90,7 +92,7 @@ FC3 더미 2개는 0으로 저장하며, ARGMAX는 실제 출력 10개만 signed
 | --- | --- | --- |
 | 1 | register_en, delay_line, signed_adder32 | reset·enable·유지·단계별 전달·signed 계산 |
 | 2 | 곱셈, bias 정렬, ReLU, shift, 포화, 워드 분리·결합 | 음수·경계값·소수점 정렬·lane 순서 |
-| 3 | dot_product4, MAC array | 균형 트리 계산, 두 레지스터 단계, 공통 valid와 공백 전달 |
+| 3 | dot_product4, MAC array | 균형 트리 계산, MAC 입력단을 포함한 세 레지스터 단계, 공통 valid와 공백 전달 |
 | 4 | 누산기·후처리 | bias 초기화, 누산, 결과 저장, 다음 bias와 동시 처리, 조합 후처리 |
 | 5 | RAM·Memory wrapper | 초기화·읽기·쓰기·주소·bank·핑퐁·TB 접근 선택 |
 | 6 | LUT·카운터·주소·파이프라인 제어·ARGMAX | 레이어별 설정, N 공백, 주소 지연, signed 순차 비교와 동점 |

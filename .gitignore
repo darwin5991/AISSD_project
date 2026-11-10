@@ -10,13 +10,34 @@
 /08_submission/*
 !/08_submission/.gitkeep
 
-# Keep run summaries and NPZ/HEX test data; ignore other generated details.
-/07_runs/**/*
-!/07_runs/**/
-!/07_runs/**/*.npz
-!/07_runs/**/*.hex
-!/07_runs/*/manifest.json
-!/07_runs/*/config.yaml
-!/07_runs/*/metrics.json
-!/07_runs/*/README.md
-!/07_runs/*/.gitkeep
+# Local run outputs and model checkpoints
+/07_runs/
+/03_model/checkpoints/
+
+# Local test files
+/03_model/golden/tests/
+/90_scripts/tests/
+
+# Local reference documents and figures
+/00_docs/reference/
+/00_docs/**/figures/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+
+# Temporary editor and operating system files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
