@@ -82,11 +82,11 @@ module memory_wrapper_tester #(
 
     task automatic validate_configuration;
         if ((MEMORY_DATA_FORMAT_VERSION !== 1) || (SAMPLE_ID !== 0) ||
-            (OUTPUT_COUNT !== SIGNAL_COUNT) || (NVEC !== 265015) ||
+            (OUTPUT_COUNT !== SIGNAL_COUNT) || (NVEC !== 265018) ||
             (INIT_WORDS !== 117607) || (FINAL_WORDS !== 324) ||
             (INITIAL_READ_BEGIN !== INIT_WORDS) || (CORE_BEGIN !== 2*INIT_WORDS+1) ||
-            (ARGMAX_READ_BEGIN !== CORE_BEGIN+29460) ||
-            (FINAL_READ_BEGIN !== CORE_BEGIN+29475) ||
+            (ARGMAX_READ_BEGIN !== CORE_BEGIN+29463) ||
+            (FINAL_READ_BEGIN !== CORE_BEGIN+29478) ||
             (NVEC !== FINAL_READ_BEGIN+FINAL_WORDS+1))
             abort_test("unsupported header format, sample or phase lengths");
         if ((TIME_UNIT_NS !== 1) || (TIME_PRECISION_PS !== 1) ||

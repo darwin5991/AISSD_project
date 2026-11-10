@@ -66,8 +66,8 @@ module tb_control_unit_recovery;
             @(negedge clk);
             check_idle();
             release u_dut.u_fsm.state;
-            // Include all five delayed-event stages in the leakage check.
-            repeat (6) begin
+            // Include all six delayed-event stages in the leakage check.
+            repeat (7) begin
                 @(negedge clk);
                 check_idle();
             end

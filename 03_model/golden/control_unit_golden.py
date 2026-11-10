@@ -27,6 +27,12 @@ REPOSITORY = PROJECT.parent
 HEADER_NAME = "control_unit_tb_data.vh"
 CLOCK_NS, RESET_CYCLES, START_WAIT_CYCLES = 10, 3, 1
 FORMAT_VERSION = 1
+# Read-edge offsets from the revised three-stage MAC specification.
+MAC_PIPELINE_DEPTH = 3
+MAC_INPUT_DELAY = 1
+ACCUMULATION_DELAY = MAC_INPUT_DELAY + MAC_PIPELINE_DEPTH
+RESULT_LOAD_DELAY = ACCUMULATION_DELAY + 1
+OUTPUT_WRITE_DELAY = RESULT_LOAD_DELAY + 1
 # Port order and widths come from control_unit.sv. No internal state encoding.
 OUTPUTS = {
     "busy": (1, False), "done": (1, False), "prediction": (4, False),
@@ -178,8 +184,8 @@ def build_vectors(logits):
     schedule, first = [], 2
     for layer in LAYERS:
         last = first + layer.groups * layer.n + layer.groups - 2
-        schedule.append({"layer": layer.name, "first_read": first, "last_read": last, "last_store": last + 5})
-        first = last + 7
+        schedule.append({"layer": layer.name, "first_read": first, "last_read": last, "last_store": last + OUTPUT_WRITE_DELAY})
+        first = schedule[-1]["last_store"] + 2
     argmax_first = schedule[-1]["last_store"] + 2
     completion = argmax_first + 12
     nvec = completion + 3  # Includes done=1 and next-cycle done=0 checks.
@@ -209,14 +215,14 @@ def build_vectors(logits):
             expected["in_en"][reads] = expected["weight_en"][reads] = 1
             expected["in_addr"][reads] = np.arange(layer.n)
             expected["weight_addr"][reads] = layer.weight_base + group * layer.n + np.arange(layer.n)
-            expected["mac_input_valid"][reads + 1] = 1
+            expected["mac_input_valid"][reads + MAC_INPUT_DELAY] = 1
             expected["bias_en"][read_first] = 1
             expected["bias_addr"][read_first] = layer.bias_base + group
-            expected["result_load"][read_last + 4] = 1
+            expected["result_load"][read_last + RESULT_LOAD_DELAY] = 1
             if group + 1 < layer.groups:
-                expected["bias_load"][read_last + 4] = 1
-            expected["out_we"][read_last + 5] = 1
-            expected["out_addr"][read_last + 5] = group
+                expected["bias_load"][read_last + RESULT_LOAD_DELAY] = 1
+            expected["out_we"][read_last + OUTPUT_WRITE_DELAY] = 1
+            expected["out_addr"][read_last + OUTPUT_WRITE_DELAY] = group
 
     # FC3's final write still uses FC3 settings. They are unused from PREP on.
     for name in ("bias_shift", "output_shift", "relu_en"):
@@ -235,6 +241,7 @@ def build_vectors(logits):
         masks[address] = expected[enable].astype(np.uint8)
     timing = {
         "layers": schedule, "argmax_first_read": argmax_first,
+        "mac_pipeline_depth": MAC_PIPELINE_DEPTH,
         "completion_rising_edge": completion, "done_check_vector": completion + 1,
         "done_low_check_vector": completion + 2, "nvec": nvec,
         "clock_period_ns": CLOCK_NS, "reset_cycles": RESET_CYCLES,
@@ -250,7 +257,7 @@ def build_vectors(logits):
 
 def validate_vectors(stim, expected, masks, timing):
     nvec = timing["nvec"]
-    require(nvec == 29475, "Schedule differs from the approved 29,475-vector scenario")
+    require(nvec == 29478, "Schedule differs from the approved 29,478-vector scenario")
     for values, ports in ((stim, INPUTS), (expected, OUTPUTS)):
         require(values.keys() == ports.keys(), "Vector signal set differs from the port contract")
         for name, (width, signed) in ports.items():
@@ -266,8 +273,8 @@ def validate_vectors(stim, expected, masks, timing):
         require(int(expected[name].sum()) == count, f"Wrong event count: {name}")
     require(np.array_equal(expected["mac_input_valid"][1:], expected["weight_en"][:-1]),
             "MLP valid must be delayed one clock")
-    # A read at R is consumed by the accumulator at R+3, per the MAC contract.
-    consumed = np.flatnonzero(expected["weight_en"]) + 3
+    # A read at R is captured by MAC at R+1 and accumulated at R+4.
+    consumed = np.flatnonzero(expected["weight_en"]) + ACCUMULATION_DELAY
     require(not np.any(expected["bias_load"][consumed]), "Bias load overlaps a valid accumulator update")
     require(int(stim["start"].sum()) == 1 and stim["start"][0] == 1, "Start must be one clock")
     require(not np.any(stim["argmax_data"][:timing["argmax_first_read"] + 1]), "ARGMAX input must start at zero")
@@ -363,7 +370,8 @@ def generate(source_run, output_dir=None, header_path=None):
         for key, value in arrays.items():
             require(np.array_equal(restored[key], value), f"Saved vector round trip failed: {key}")
     (out / "source_manifest.json").write_bytes(source["manifest_bytes"])
-    source_files = [Path(__file__), PROJECT / "00_docs/verification/control_unit.md",
+    source_files = [Path(__file__), PROJECT / "00_docs/mac_input_pipeline.md",
+                    PROJECT / "00_docs/verification/control_unit.md",
                     PROJECT / "00_docs/modules/control_unit.md", PROJECT / "00_docs/architecture.md"]
     source_hashes = {}
     for path in source_files:

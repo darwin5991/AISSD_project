@@ -136,7 +136,7 @@ def build_stimulus(source):
                   timeout_cycles=first + nvec - 1 + 100,
                   argmax_settings_begin=core + ctl_timing["layers"][-1]["last_store"] + 1)
     control.require((trace_count, nvec, timing["expected_cycles"], timing["timeout_cycles"]) ==
-                    (265015, 265016, 265019, 265119),
+                    (265018, 265019, 265022, 265122),
                     "Accumulator timeline differs from the approved scenario")
     return stim, timing
 
@@ -202,10 +202,11 @@ def validate_vectors(source, stim, expected, masks, timing, acc, result):
         first = timing["core_begin"] + schedule["first_read"]
         group_first = first + np.arange(layer.groups) * (layer.n + 1)
         reads = group_first[:, None] + np.arange(layer.n)
-        sums = reads + 3
-        loads = group_first + 2
-        loads[0] = first + 1
-        captures = reads[:, -1] + 4
+        sums = reads + control.ACCUMULATION_DELAY
+        captures = reads[:, -1] + control.RESULT_LOAD_DELAY
+        # Preserve the first bias read + 1; subsequent biases load with the
+        # previous group's result capture, one cycle before the next first sum.
+        loads = np.concatenate(([first + 1], captures[:-1]))
         planned["bias_load"][loads] = 1
         planned["psum_valid"][sums.reshape(-1)] = 1
         planned["result_load"][captures] = 1
@@ -342,7 +343,8 @@ def generate(source_run, output_dir=None, header_path=None):
     source_hashes = {}
     source_paths = [
         Path(__file__), Path(control.__file__), Path(memory.__file__), Path(mac.__file__), Path(top.__file__),
-        PROJECT / "00_docs/architecture.md", PROJECT / "00_docs/modules/accumulator_postprocess.md",
+        PROJECT / "00_docs/architecture.md", PROJECT / "00_docs/mac_input_pipeline.md",
+        PROJECT / "00_docs/modules/accumulator_postprocess.md",
         PROJECT / "00_docs/verification/accumulator_postprocess.md",
         PROJECT / "00_docs/modules/control_unit.md", PROJECT / "00_docs/modules/memory_wrapper.md",
         PROJECT / "00_docs/modules/mac_array.md", PROJECT / "00_docs/verification/mac_array.md",

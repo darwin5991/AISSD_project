@@ -49,13 +49,13 @@ module accumulator_postprocess_tester #(
 
     task automatic validate_configuration;
         if ((ACC_DATA_FORMAT_VERSION !== 1) || (SAMPLE_ID !== 0) ||
-            (OUTPUT_COUNT !== SIGNAL_COUNT) || (NVEC !== 265016) ||
-            (TRACE_VECTORS !== 265015) || (RESPONSE_LATENCY !== 1) ||
-            (MAC_PIPELINE_DEPTH !== 2) || (INIT_WORDS !== 117607) ||
+            (OUTPUT_COUNT !== SIGNAL_COUNT) || (NVEC !== 265019) ||
+            (TRACE_VECTORS !== 265018) || (RESPONSE_LATENCY !== 1) ||
+            (MAC_PIPELINE_DEPTH !== 3) || (INIT_WORDS !== 117607) ||
             (INITIAL_READ_BEGIN !== INIT_WORDS) || (CORE_BEGIN !== 2*INIT_WORDS+1) ||
-            (ARGMAX_READ_BEGIN !== CORE_BEGIN+29460) ||
-            (ARGMAX_SETTINGS_BEGIN !== CORE_BEGIN+29459) ||
-            (FINAL_READ_BEGIN !== CORE_BEGIN+29475) || (FINAL_WORDS !== 324) ||
+            (ARGMAX_READ_BEGIN !== CORE_BEGIN+29463) ||
+            (ARGMAX_SETTINGS_BEGIN !== CORE_BEGIN+29462) ||
+            (FINAL_READ_BEGIN !== CORE_BEGIN+29478) || (FINAL_WORDS !== 324) ||
             (TRACE_VECTORS !== FINAL_READ_BEGIN+FINAL_WORDS+1) ||
             (DRAIN_BEGIN !== TRACE_VECTORS) || (NVEC !== TRACE_VECTORS+RESPONSE_LATENCY) ||
             (BIAS_LOADS !== 163) || (VALID_SUMS !== 29280) ||
@@ -67,7 +67,7 @@ module accumulator_postprocess_tester #(
             (CLOCK_PERIOD_NS !== TB_CLOCK_PERIOD_NS) || (RESET_CYCLES !== TB_RESET_CYCLES) ||
             (START_WAIT_CYCLES !== TB_START_WAIT_CYCLES) || (INITIAL_CLK !== TB_INITIAL_CLK) ||
             (FIRST_VECTOR_CYCLE !== RESET_CYCLES+START_WAIT_CYCLES) ||
-            (EXPECTED_CYCLES !== 265019) || (TIMEOUT_CYCLES !== 265119) ||
+            (EXPECTED_CYCLES !== 265022) || (TIMEOUT_CYCLES !== 265122) ||
             (EXPECTED_CYCLES !== FIRST_VECTOR_CYCLE+NVEC-1) ||
             (TIMEOUT_CYCLES !== EXPECTED_CYCLES+100))
             abort_test("TB/header timing mismatch");

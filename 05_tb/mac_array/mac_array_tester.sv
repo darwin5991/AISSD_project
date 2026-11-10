@@ -67,11 +67,11 @@ module mac_array_tester #(
 
     task automatic validate_configuration;
         if ((MAC_DATA_FORMAT_VERSION !== 1) || (SAMPLE_ID !== 0) ||
-            (OUTPUT_COUNT !== SIGNAL_COUNT) || (NVEC !== 265017) ||
-            (TRACE_VECTORS !== 265015) || (PIPELINE_DEPTH !== 2) ||
+            (OUTPUT_COUNT !== SIGNAL_COUNT) || (NVEC !== 265021) ||
+            (TRACE_VECTORS !== 265018) || (PIPELINE_DEPTH !== 3) ||
             (INIT_WORDS !== 117607) || (INITIAL_READ_BEGIN !== INIT_WORDS) ||
-            (CORE_BEGIN !== 2*INIT_WORDS+1) || (ARGMAX_READ_BEGIN !== CORE_BEGIN+29460) ||
-            (FINAL_READ_BEGIN !== CORE_BEGIN+29475) || (FINAL_WORDS !== 324) ||
+            (CORE_BEGIN !== 2*INIT_WORDS+1) || (ARGMAX_READ_BEGIN !== CORE_BEGIN+29463) ||
+            (FINAL_READ_BEGIN !== CORE_BEGIN+29478) || (FINAL_WORDS !== 324) ||
             (TRACE_VECTORS !== FINAL_READ_BEGIN+FINAL_WORDS+1) ||
             (DRAIN_BEGIN !== TRACE_VECTORS) || (NVEC !== TRACE_VECTORS+PIPELINE_DEPTH) ||
             (VALID_INPUTS !== 29280))

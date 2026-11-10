@@ -69,9 +69,9 @@ module mlp_top_tester #(
 
     task automatic validate_configuration;
         if ((TOP_DATA_FORMAT_VERSION !== 1) || ((^SAMPLE_ID) === 1'bx) ||
-            (SAMPLE_ID < 0) || (SAMPLE_ID > 9) || (NVEC !== 265015) ||
+            (SAMPLE_ID < 0) || (SAMPLE_ID > 9) || (NVEC !== 265018) ||
             (INIT_WORDS !== 117607) || (FINAL_WORDS !== 324) ||
-            (START_VECTOR !== 2*INIT_WORDS+1) || (FINAL_READ_BEGIN !== START_VECTOR+29475) ||
+            (START_VECTOR !== 2*INIT_WORDS+1) || (FINAL_READ_BEGIN !== START_VECTOR+29478) ||
             (NVEC !== FINAL_READ_BEGIN+FINAL_WORDS+1) ||
             (EXPECTED_PREDICTION < 0) || (EXPECTED_PREDICTION > 9))
             abort_test("unsupported header format, sample or phase lengths");

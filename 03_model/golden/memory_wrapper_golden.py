@@ -88,7 +88,7 @@ def build_stimulus(source):
         stim[name][core_begin:final_begin] = ctl[name]
     for layer, schedule in zip(control.LAYERS, ctl_timing["layers"]):
         writes = (schedule["first_read"] + np.arange(layer.groups) * (layer.n + 1)
-                  + layer.n - 1 + 5)
+                  + layer.n - 1 + control.OUTPUT_WRITE_DELAY)
         control.require(np.all(ctl["out_we"][writes] == 1) and
                         np.array_equal(ctl["out_addr"][writes], np.arange(layer.groups)),
                         f"Output write schedule differs: {layer.name}")
@@ -106,7 +106,7 @@ def build_stimulus(source):
         "final_read_begin": final_begin, "final_words": final_count,
         "last_response_vector": nvec - 1, "control_schedule": ctl_timing,
     }
-    control.require((count, final_count, nvec) == (117607, 324, 265015),
+    control.require((count, final_count, nvec) == (117607, 324, 265018),
                     "Memory phases differ from the approved Top schedule")
     for name, (width, _) in INPUTS.items():
         control.require(stim[name].shape == (nvec,) and
@@ -351,7 +351,8 @@ def generate(source_run, output_dir=None, header_path=None):
     (out / "source_manifest.json").write_bytes(source["manifest_bytes"])
     source_hashes = {}
     source_paths = [Path(__file__), Path(top.__file__), Path(control.__file__),
-                    PROJECT / "00_docs/architecture.md", PROJECT / "00_docs/modules/memory_wrapper.md",
+                    PROJECT / "00_docs/architecture.md", PROJECT / "00_docs/mac_input_pipeline.md",
+                    PROJECT / "00_docs/modules/memory_wrapper.md",
                     PROJECT / "00_docs/verification/memory_wrapper.md"]
     for path in source_paths:
         relative = path.relative_to(PROJECT)

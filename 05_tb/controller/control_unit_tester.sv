@@ -93,7 +93,7 @@ module control_unit_tester #(
 
     task automatic validate_configuration;
         if ((CONTROL_DATA_FORMAT_VERSION !== 1) || (SAMPLE_ID !== 0) ||
-            (NVEC !== 29475) || (EXPECTED_PREDICTION < 0) || (EXPECTED_PREDICTION > 9))
+            (NVEC !== 29478) || (EXPECTED_PREDICTION < 0) || (EXPECTED_PREDICTION > 9))
             abort_test("unsupported header format, sample or vector count");
 
         if ((TIME_UNIT_NS !== 1) || (TIME_PRECISION_PS !== 1) ||

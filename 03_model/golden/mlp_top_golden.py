@@ -147,7 +147,7 @@ def build_vectors(source):
               "init_words": count, "initial_read_begin": count, "start_vector": start,
               "done_check_vector": done_vector, "final_read_begin": final_begin,
               "final_words": final_count, "control_schedule": ctl_timing}
-    control.require((count, final_count, nvec) == (117607, 324, 265015), "Unexpected phase lengths")
+    control.require((count, final_count, nvec) == (117607, 324, 265018), "Unexpected phase lengths")
     control.require(stim["start"].sum() == 1 and not np.any(stim["tb_en"][inference]), "TB/core access overlap")
     control.require(expected["probe_out_we"].sum() == 163 and expected["done"].sum() == 1,
                     "Unexpected inference event counts")
@@ -246,7 +246,8 @@ def generate(source_run, output_dir=None, header_path=None):
     (out / "source_manifest.json").write_bytes(source["manifest_bytes"])
     snapshots = out / "source_snapshot"
     snapshots.mkdir()
-    source_paths = [Path(__file__), Path(control.__file__), PROJECT / "00_docs/modules/mlp_top.md",
+    source_paths = [Path(__file__), Path(control.__file__), PROJECT / "00_docs/mac_input_pipeline.md",
+                    PROJECT / "00_docs/modules/mlp_top.md",
                     PROJECT / "00_docs/verification/mlp_top.md"]
     source_hashes = {}
     for path in source_paths:

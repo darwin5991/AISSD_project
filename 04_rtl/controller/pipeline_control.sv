@@ -2,11 +2,12 @@
 // Design Name : MLP end-to-end accelerator
 // Module Name : pipeline_control
 // Description : Read scheduling and delayed metadata for MLP pipeline control.
-// Status      : read schedule and delayed control events implemented
+// Status      : three-stage MAC event schedule implemented; verification pending
 // Reference   : project/00_docs/architecture.md
 ////////////////////////////////////////////////////////////////////////////////
 // Delay taps drive destination enables before their sampling edge.
-// For a read at R: MAC R+1, result capture R+4, output write R+5.
+// Read R: MAC operands R+1, products R+2, sum R+3, accumulation R+4.
+// Result capture/next bias: R+5; output write/address/layer completion: R+6.
 
 module pipeline_control (
     input  logic                clk,
@@ -48,7 +49,7 @@ logic first_read;
 logic last_input;
 logic next_bias;
 logic first_read_d1;
-logic next_bias_d4;
+logic next_bias_d5;
 logic mac_input_valid_raw;
 logic result_load_raw;
 logic out_we_raw;
@@ -116,35 +117,35 @@ delay_line #(.WIDTH(1), .DEPTH(1)) u_first_bias (
     .data_out(first_read_d1)
 );
 
-delay_line #(.WIDTH(1), .DEPTH(4)) u_result_load (
+delay_line #(.WIDTH(1), .DEPTH(5)) u_result_load (
     .clk(clk),
     .rst_n(metadata_rst_n),
     .data_in(last_input),
     .data_out(result_load_raw)
 );
 
-delay_line #(.WIDTH(1), .DEPTH(4)) u_next_bias (
+delay_line #(.WIDTH(1), .DEPTH(5)) u_next_bias (
     .clk(clk),
     .rst_n(metadata_rst_n),
     .data_in(next_bias),
-    .data_out(next_bias_d4)
+    .data_out(next_bias_d5)
 );
 
-delay_line #(.WIDTH(1), .DEPTH(5)) u_output_write (
+delay_line #(.WIDTH(1), .DEPTH(6)) u_output_write (
     .clk(clk),
     .rst_n(metadata_rst_n),
     .data_in(last_input),
     .data_out(out_we_raw)
 );
 
-delay_line #(.WIDTH(7), .DEPTH(5)) u_output_address (
+delay_line #(.WIDTH(7), .DEPTH(6)) u_output_address (
     .clk(clk),
     .rst_n(metadata_rst_n),
     .data_in(output_group),
     .data_out(out_addr)
 );
 
-delay_line #(.WIDTH(1), .DEPTH(5)) u_layer_stored (
+delay_line #(.WIDTH(1), .DEPTH(6)) u_layer_stored (
     .clk(clk),
     .rst_n(metadata_rst_n),
     .data_in(last_read),
@@ -153,7 +154,7 @@ delay_line #(.WIDTH(1), .DEPTH(5)) u_layer_stored (
 
 pipeline_event_control u_bias_event (
     .first_read_d1(first_read_d1),
-    .next_bias_d4(next_bias_d4),
+    .next_bias_d5(next_bias_d5),
     .bias_load(bias_load_raw)
 );
 
