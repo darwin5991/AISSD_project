@@ -10,7 +10,8 @@
 module single_port_bram #(
     parameter integer WIDTH = 32,
     parameter integer DEPTH = 196,
-    parameter integer ADDR_WIDTH = 8
+    parameter integer ADDR_WIDTH = 8,
+    parameter RAM_DECOMP = "auto"
 ) (
     input  logic                clk,
     input  logic                rst_n,
@@ -23,6 +24,8 @@ module single_port_bram #(
     output logic        [WIDTH-1:0] rdata
 );
 
+// Keep the interface and read latency fixed while selecting BRAM decomposition.
+(* ram_style = "block", ram_decomp = RAM_DECOMP *)
 logic [WIDTH-1:0] memory [0:DEPTH-1];
 
 // No initialization or reset assignment to stored words. Keep storage writes

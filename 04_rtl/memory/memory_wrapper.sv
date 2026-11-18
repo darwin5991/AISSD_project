@@ -155,7 +155,7 @@ single_port_bram #(.DEPTH(128), .ADDR_WIDTH(7)) u_buffer_b (
 );
 
 for (genvar bank = 0; bank < 4; bank++) begin : g_weight_rams
-    single_port_bram #(.DEPTH(29280), .ADDR_WIDTH(15)) u_weight (
+    single_port_bram #(.DEPTH(29280), .ADDR_WIDTH(15), .RAM_DECOMP("area")) u_weight (
         .clk(clk),
         .rst_n(rst_n),
         .en(ram_en[bank+2]),
