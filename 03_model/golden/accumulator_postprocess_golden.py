@@ -141,13 +141,19 @@ def build_stimulus(source):
     return stim, timing
 
 
+def wrap32(values):
+    """Phase 5 approved arithmetic: signed two-complement INT32 modulo."""
+    values = np.asarray(values, dtype=np.int64)
+    return ((values + (1 << 31)) % (1 << 32)) - (1 << 31)
+
+
 def aligned_bias(values, shift):
     values = np.asarray(values, dtype=np.int64)
     shift = int(shift)
     control.require(-32 <= shift <= 31, "Bias shift exceeds its signed 6-bit port")
     aligned = values << shift if shift >= 0 else values >> -shift
-    # Reject a source/scenario outside INT32; do not invent overflow semantics.
-    return mac.checked32(aligned, "aligned bias")
+    # Hardware retains the low 32 bits before signed interpretation.
+    return wrap32(aligned)
 
 
 def build_expected(stim, timing):
@@ -164,8 +170,7 @@ def build_expected(stim, timing):
         if stim["bias_load"][vector]:
             acc[vector + 1] = aligned_bias(bias[vector], stim["bias_shift"][vector])
         elif stim["psum_valid"][vector]:
-            acc[vector + 1] = mac.checked32(acc[vector] + partial[vector],
-                                            f"accumulation at vector {vector}")
+            acc[vector + 1] = wrap32(acc[vector] + partial[vector])
         else:
             acc[vector + 1] = acc[vector]
     # Comparison k precedes driving settings[k], so it uses settings[k-1].

@@ -4,7 +4,7 @@
 
 **근거 RTL:** `04_rtl/controller/mlp_top.sv`, `control_unit.sv`, `pipeline_control.sv`, `read_issue_control.sv`, `address_generator.sv`, `layer_config_lut.sv`, `argmax_*`, `04_rtl/memory/memory_wrapper.sv`, `memory_port_mux.sv`, `buffer_router.sv`, `single_port_bram.sv`, `04_rtl/mac_array/*`, `04_rtl/accumulator_postprocess/*` (2026-11-24 GitHub 기본 브랜치 확인). **기존 문서:** `00_docs/architecture.md`, `00_docs/mac_input_pipeline.md`.
 
-현재 구현은 [Phase 4 보고서](13_phase4_report.md)의 Scalar/Fetch/CSR/Timer, Scalar LW/SW, 직렬 Block LOAD/STORE, 내부 SRAM 7개와 공유 외부 DMEM 연결까지다. 신규 NPU GEMM/ARGMAX 실행은 후속 승인 범위다. [10번 결정](10_phase3_decisions.md)의 Phase/DMEM 영역과 [12번 결정](12_phase4_decisions.md)의 Scalar wrap 검사 순서를 적용한다.
+현재 구현은 [Phase 5 보고서](15_phase5_report.md)의 Scalar/CSR/Timer, LW/SW, Block LOAD/STORE, 내부 SRAM 7개 및 CSR Snapshot 기반 단일 GEMM까지다. ARGMAX는 후속 승인 범위다. [10](10_phase3_decisions.md)·[12](12_phase4_decisions.md)·[14번 결정](14_phase5_decisions.md)을 적용한다. 최소 K=8은 실제 검증 후 사용자 승인으로 확정한 정식 지원 하한이다.
 
 ## 1. 최상위 구조
 
@@ -104,6 +104,11 @@ Write:
 
 ## 4. GEMM 실행 경로 재구성
 
+Phase 5 구현 승인은 [14번 결정](14_phase5_decisions.md)을 따른다. CSR file의 10개 설정을 병렬 출력하고 Instruction Controller에서 원자적 Snapshot → CHECK → START → WAIT를 수행한다. 검증 전 Engine start/메모리 접근/Timer active는 금지한다.
+독립 GEMM Engine은 기존 unpack/MAC/Accumulator를 연결하고, layer 없는 Controller가 PREP 1edge → RUN → DRAIN → 완료 → IDLE로 실행한다. 최종 Write 이후에만 done을 알린다.
+Wrapper의 기존 GEMM bank별 물리 포트를 사용하며, 주소는 축소 전에 전체 설정/끝 주소 및 실행 중 접근을 검사한다. 입력/출력은 반대 Buffer이고 Weight 4 bank는 같은 offset으로 병렬 Read한다.
+
+
 ### 현재 구조
 
 현재 `control_unit.sv`는 `start → FC1 → FC2 → FC3 → ARGMAX → done` 자동 진행. `layer_config_lut.sv`가 고정 3 Layer 설정을 제공하며, `control_fsm.sv`와 `read_issue_control.sv`에 `layer_index`와 ARGMAX 자동 전이가 들어 있다.
@@ -111,7 +116,7 @@ Write:
 ### 새 구조
 
 - **Instruction Controller**는 `EXEC GEMM` 1개를 발행하고 `gemm_done`을 기다린다.
-- D-01: CSR write 시 RW 원본 32bit 보존, 실행 설정값 검증은 EXEC snapshot 시에만 수행한다. D-02: 짧은 K bias staging은 현재 제외, K=4는 실행 전 INVALID_CONFIG 및 start/write 금지. 지원 하한은 Phase 5 경계 검증 후 확정한다.
+- D-01: CSR write 시 RW 원본 32bit 보존, 실행 설정값 검증은 EXEC snapshot 시에만 수행한다. D-02: 짧은 K bias staging은 현재 제외, K=4는 선행 오류가 없으면 실행 전 INVALID_CONFIG 및 start/write 금지. 정식 지원 하한 K=8은 Phase 5 경계 검증 후 사용자 승인으로 확정했다.
 - **GEMM Controller**는 CSR Snapshot(`SRC0/1/DST/BIAS`, `M,N,K`, Shift/Mode)으로 입력 워드 수(`K/4`), 출력 그룹 수(`ceil(N/4)`), Weight/Bias 시작 Word Offset, 핑퐁 Buffer 선택을 정한다.
 - **GEMM FSM**은 `IDLE→PREP→RUN→DRAIN→DONE`으로 한 레이어만 실행; `DRAIN`은 최종 출력 SRAM Write 에지가 완료되었음을 보장.
 - 기존 `input_word`(8bit), `output_group`(7bit) counter는 재사용하고 **layer counter는 제거**. `address_generator`는 `SRC1_BASE`, `BIAS_BASE`와 CSR 파생값에 따라 계산하도록 수정.
@@ -153,7 +158,7 @@ Write:
 | `gemm_controller` | counters, FSM, pipeline tags | 1 GEMM 실행, MAC Read/Write 스케줄, done |
 | `argmax_engine` | index, read/compare phase | 가변 1~10 signed INT8 비교, 결과 |
 
-Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. 값 범위 검증과 EXEC snapshot은 아직 구현하지 않았다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 센다. Phase 3의 npu_top은 실제 Block Transfer LOAD active를 연결하며 GEMM active는 아직 0이다. 별도 TB의 기존 테스트용 activity 입력은 유지한다. 신규 npu_memory_wrapper는 기존 single_port_bram 7개를 같은 깊이와 1clk read로 재사용하고 XFER/GEMM/ARGMAX 포트를 분리한다. 새 output data register는 없으며 GEMM/ARGMAX 엔진은 현재 비활성이다. 외부 DMEM은 byte address의 32bit Single-Port 고정 동기 read이고, read R 수락 → R+1 capture → R+2 write로 직렬 전송한다.
+Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. Phase 5에서 GEMM 원자적 Snapshot과 실행 전 설정 검증을 추가했다. ARGMAX Snapshot/검증은 후속 범위다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 센다. Phase 3의 npu_top은 실제 Block Transfer LOAD active를 연결하며 GEMM active는 Phase 5의 실제 Engine 실행 PREP~최종 Write에 연결한다. 별도 TB의 기존 테스트용 activity 입력은 유지한다. 신규 npu_memory_wrapper는 기존 single_port_bram 7개를 같은 깊이와 1clk read로 재사용하고 XFER/GEMM/ARGMAX 포트를 분리한다. 새 output data register는 없으며 GEMM은 Phase 5에서 연결했으며 ARGMAX 엔진은 현재 비활성이다. 외부 DMEM은 byte address의 32bit Single-Port 고정 동기 read이고, read R 수락 → R+1 capture → R+2 write로 직렬 전송한다.
 
 Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산하여 정렬 → 산술 wrap → Region → 용량 Bounds를 검사한다. MEM_REQ에서 Scalar 요청, XFER_WAIT에서 기존 Block Transfer 요청을 조합 선택한다. 응답 저장소나 외부 포트/프로토콜을 추가하지 않는다. LW는 read 수락 R 다음 R+1에 GPR writeback/PC 전진하며, SW는 write R 후 R+1에 완료한다. 대기 중 다음 Fetch/GPR/CSR 갱신은 차단한다. 기존 7개 SRAM/Wrapper 및 Block Transfer RTL은 보존했다.
 

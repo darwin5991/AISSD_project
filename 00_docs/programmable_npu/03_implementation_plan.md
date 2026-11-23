@@ -2,7 +2,7 @@
 
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
-**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 3 검증 상태를 6ccd00d에 보존한 뒤, 사용자 승인에 따라 Phase 4 Scalar LW/SW 구현·검증을 완료했다. [Phase 4 실행 보고서](13_phase4_report.md)의 Gate PASS를 보고하며, 사용자 승인 전 Phase 5 GEMM으로 진행하지 않는다.
+**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 4를 6efeec4에 보존한 뒤 사용자 승인에 따라 Phase 5 GEMM 구현·검증을 완료했다. [Phase 5 결과](15_phase5_report.md)의 Gate PASS와 정식 지원 하한 K=8 확정을 기록한다. 사용자 승인 전 Phase 6 ARGMAX로 진행하지 않는다.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -74,7 +74,7 @@
 
 ## Phase 4 — 외부 IMEM/DMEM 모델, Scalar LW/SW, 주소 검증
 
-**진행 승인 및 실행 상태 (2026-11-24): PASS.** LW/SW 각각 signed imm12 전체 4096개, 64KiB 315 cases, 4KiB/기본 16MiB 각각 11 cases 및 소규모 파형 1 case. Phase 1~3·Python 27개·Legacy 5종 회귀 PASS. [13_phase4_report.md](13_phase4_report.md). Phase 5는 미시작이며 별도 승인이 필요하다.
+**진행 승인 및 실행 상태 (2026-11-24): PASS.** LW/SW 각각 signed imm12 전체 4096개, 64KiB 315 cases, 4KiB/기본 16MiB 각각 11 cases 및 소규모 파형 1 case. Phase 1~3·Python 27개·Legacy 5종 회귀 PASS. [13_phase4_report.md](13_phase4_report.md). 이후 Phase 5 진행을 승인받았으며 아래 결과를 따른다.
 
 **실제 구현:** 기존 instruction_controller/decoder/ISA package 확장, Controller 내부 Scalar/Block DMEM 선택. 별도 tb_npu_phase4.sv, phase4_vectors.py, run_phase4.py를 추가했다. Top/Block Transfer/SRAM Wrapper/BRAM은 수정하지 않았다.
 
@@ -83,6 +83,8 @@
 **완료 조건:** Address+WriteData+ReadData를 waveform과 scoreboard로 검증; Read 요청 edge R와 소비 edge R+1 규칙 PASS.
 
 ## Phase 5 — GEMM 1회 실행 엔진 통합
+
+**진행 승인 및 실행 상태 (2026-11-24): PASS.** 주 suite 173 cases / 37451392 RTL checks, K 경계 72 cases, 독립/연속 Legacy FC 출력 326words 일치. Snapshot/INT32 wrap/R→R+6/Timer/Fault 및 Phase 1~4·Python·Legacy 회귀 PASS. 최소 K=8은 사용자 승인으로 정식 지원 하한을 확정했다. [15_phase5_report.md](15_phase5_report.md). Phase 6은 미시작이다.
 
 **기존 RTL 중 핵심 변경 후보:**
 
@@ -97,7 +99,7 @@
 
 **절대 보존:** `mac_array.sv`, 내부 input register, signed_multiplier, adder_tree, partial_sum register, accumulator/postprocess 산술, `bias_load` 및 `out_we` 에지 관계.
 
-**테스트:** D-02에 따라 K=4는 INVALID_CONFIG/start·SRAM write 없음 확인. K=8/12/16/32 경계 분석·시뮬레이션 후 정확한 최소 지원 K 확정 (현재 staging 추가 금지). 독립 FC1/2/3 각각 CSR 기반 GEMM, 입력/출력 버퍼 반대 선택, Packed INT8 Weight 4 Bank 동기 읽기, Bias shift, Out shift, ReLU, N=10 padding, `done` 최종 write 이후, 지원하지 않는 `M>1`/Overflow Config Fault. 기존 Python Golden과 layerwise bit-exact.
+**테스트:** D-02에 따라 K=4는 INVALID_CONFIG/start·SRAM write 없음 확인. K=8/12/16/32 경계 분석·시뮬레이션 후 검증 후 최소 지원 K=8 확정 (현재 staging 추가 금지). 독립 FC1/2/3 각각 CSR 기반 GEMM, 입력/출력 버퍼 반대 선택, Packed INT8 Weight 4 Bank 동기 읽기, Bias shift, Out shift, ReLU, N=10 padding, `done` 최종 write 이후, 지원하지 않는 `M>1`/Overflow Config Fault. 기존 Python Golden과 layerwise bit-exact.
 
 **완료 조건:** 3개 FC의 모든 출력 워드 Golden 일치; 전체 MLP도 3×`EXEC GEMM` 결과가 이전 베이스라인과 동일. Timer GEMM active count 일치.
 

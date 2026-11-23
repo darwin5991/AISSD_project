@@ -6,6 +6,7 @@ module csr_file (
     input logic [31:0] write_data,
     output logic [31:0] read_data,
     output logic [7:0] access_error,
+    output wire [31:0] gemm_settings [0:9],
     input logic [31:0] perf_count,
     input logic perf_overflow,
     input logic [31:0] status,
@@ -13,6 +14,7 @@ module csr_file (
 );
     import npu_isa_pkg::*;
     logic [31:0] settings [0:11];
+    for(genvar g=0;g<10;g++) assign gemm_settings[g]=settings[g];
     integer rw_index;
     logic known;
     always_comb begin

@@ -6,6 +6,10 @@ module instruction_controller #(
 ) (
     input logic clk, rst_n, start,
     input logic load_engine_active, gemm_engine_active,
+    output logic gemm_start,
+    output logic [31:0] gemm_config [0:9],
+    input logic gemm_done,gemm_fault,
+    input logic [7:0] gemm_config_error,gemm_error_code,
     output logic busy, done, fault,
     output logic imem_en,
     output logic [31:0] imem_addr,
@@ -23,9 +27,24 @@ module instruction_controller #(
 );
     import npu_isa_pkg::*;
     typedef enum logic [3:0] {
-        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT, MEM_REQ, MEM_WAIT
+        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT, MEM_REQ, MEM_WAIT, GEMM_CHECK, GEMM_START, GEMM_WAIT
     } state_t;
     state_t state;
+    wire [31:0] gemm_settings [0:9];
+    logic [31:0] gemm_next_pc;
+    logic [7:0] gemm_next_pc_error,gemm_check_error;
+    function automatic logic [2:0] memory_error_rank(input logic [7:0] code);
+        case(code)
+            ERR_MISALIGNED: memory_error_rank=0;
+            ERR_INVALID_REGION: memory_error_rank=1;
+            ERR_MEMORY_BOUNDS: memory_error_rank=2;
+            ERR_INVALID_CONFIG: memory_error_rank=3;
+            default: memory_error_rank=4;
+        endcase
+    endfunction
+    assign gemm_check_error=(gemm_next_pc_error==ERR_OK)?gemm_config_error:
+        ((gemm_config_error==ERR_OK || memory_error_rank(gemm_next_pc_error)<memory_error_rank(gemm_config_error))?
+            gemm_next_pc_error:gemm_config_error);
     logic is_scalar_memory;
     logic [32:0] scalar_effective;
     logic [7:0] scalar_memory_error;
@@ -93,7 +112,7 @@ module instruction_controller #(
         .clk(clk), .rst_n(rst_n), .access_en(csr_access),
         .write_request(csr_write_request), .commit_en(instruction_commit),
         .address(csr_address), .write_data(csr_write_data),
-        .read_data(csr_read_data), .access_error(csr_error),
+        .read_data(csr_read_data), .access_error(csr_error), .gemm_settings(gemm_settings),
         .perf_count(perf_count), .perf_overflow(perf_overflow),
         .status(status), .error_code(error_code)
     );
@@ -112,6 +131,7 @@ module instruction_controller #(
         .dmem_wdata(xfer_dmem_wdata),.dmem_rdata(dmem_rdata),
         .sram_en(sram_en),.sram_we(sram_we),.sram_address(sram_address),
         .sram_wdata(sram_wdata),.sram_rdata(sram_rdata),.sram_error(sram_error));
+    assign gemm_start=rst_n && state==GEMM_START;
     assign is_scalar_memory=(operation==OP_LW)||(operation==OP_SW);
     // Base is unsigned, immediate is signed. Keep carry/borrow before truncation.
     assign scalar_effective={1'b0,rs1_data}+{immediate[31],immediate};
@@ -138,7 +158,7 @@ module instruction_controller #(
     assign execute_error = (decode_error != ERR_OK) ? decode_error : csr_error;
     assign instruction_commit = rst_n && (state == EXECUTE) &&
         (execute_error == ERR_OK) && (operation != OP_END) &&
-        !is_scalar_memory && (next_pc_error == ERR_OK);
+        !is_scalar_memory && operation!=OP_GEMM && (next_pc_error == ERR_OK);
     assign timer_start = instruction_commit && (operation == OP_TSTART);
     assign timer_stop = instruction_commit && (operation == OP_TSTOP);
     assign fetch_error = check_pc({1'b0, pc});
@@ -147,7 +167,8 @@ module instruction_controller #(
     assign imem_en = rst_n && (state == FETCH_REQ) && (fetch_error == ERR_OK);
     assign busy = (state == FETCH_REQ) || (state == FETCH_WAIT) || (state == EXECUTE) ||
         (state == XFER_ARGS) || (state == XFER_WAIT) ||
-        (state == MEM_REQ) || (state == MEM_WAIT);
+        (state == MEM_REQ) || (state == MEM_WAIT) ||
+        (state == GEMM_CHECK) || (state == GEMM_START) || (state == GEMM_WAIT);
     assign fault = (state == FAULT_HALT);
     // No architectural write occurs on decode/target failure (including JAL link).
     assign register_write = (instruction_commit && writes_rd) ||
@@ -160,6 +181,8 @@ module instruction_controller #(
             instruction <= 32'd0;
             transfer_src<=0;transfer_dst<=0;transfer_next_pc<=0;
             scalar_address<=0;scalar_write_data<=0;scalar_next_pc<=0;
+            gemm_next_pc<=0;gemm_next_pc_error<=ERR_OK;
+            for(integer g=0;g<10;g++) gemm_config[g]<=0;
             done <= 1'b0;
             status <= STATUS_RUNNING;
             error_code <= ERR_OK;
@@ -191,6 +214,10 @@ module instruction_controller #(
                         state <= HALTED;
                         status <= STATUS_END;
                         done <= 1'b1;
+                    end else if(operation==OP_GEMM) begin
+                        // Snapshot first, then merge all memory/config errors by ISA priority.
+                        for(integer g=0;g<10;g++) gemm_config[g]<=gemm_settings[g];
+                        gemm_next_pc<=next_pc[31:0];gemm_next_pc_error<=next_pc_error;state<=GEMM_CHECK;
                     end else if (next_pc_error != ERR_OK) begin
                         state <= FAULT_HALT;
                         status <= STATUS_ERROR;
@@ -215,6 +242,17 @@ module instruction_controller #(
                 // Read R is consumed at R+1. SW also completes after its write edge.
                 MEM_REQ: state<=MEM_WAIT;
                 MEM_WAIT: begin pc<=scalar_next_pc;state<=FETCH_REQ;end
+                GEMM_CHECK: begin
+                    if(gemm_check_error!=ERR_OK) begin
+                        state<=FAULT_HALT;status<=STATUS_ERROR;error_code<=gemm_check_error;
+                    end else state<=GEMM_START;
+                end
+                GEMM_START: state<=GEMM_WAIT;
+                GEMM_WAIT: begin
+                    if(gemm_fault) begin
+                        state<=FAULT_HALT;status<=STATUS_ERROR;error_code<=gemm_error_code;
+                    end else if(gemm_done) begin pc<=gemm_next_pc;state<=FETCH_REQ;end
+                end
                 XFER_ARGS: state<=XFER_WAIT;
                 XFER_WAIT: begin
                     if(transfer_fault) begin

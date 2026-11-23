@@ -113,6 +113,8 @@ module instruction_decoder (
                     uses_rd=1'b1;uses_rs1=1'b1;uses_rs2=1'b1;
                 end else if (instruction == INSN_END)
                     operation = OP_END;
+                else if (instruction == INSN_GEMM)
+                    operation = OP_GEMM;
                 else if (instruction == INSN_TSTART)
                     operation = OP_TSTART;
                 else if (instruction == INSN_TSTOP)

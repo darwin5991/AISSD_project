@@ -10,6 +10,7 @@ package npu_isa_pkg;
         OPC_LW = 7'h03, OPC_SW = 7'h23, OPC_CSR = 7'h73,
         OPC_SETI = 7'h0b, OPC_NPU = 7'h2b;
     localparam logic [31:0] INSN_END = 32'h0400_302b,
+        INSN_GEMM = 32'h0000_202b,
         INSN_TSTART = 32'h0000_302b, INSN_TSTOP = 32'h0200_302b;
     localparam logic [11:0] CSR_SRC0_BASE = 12'h7c0,
         CSR_SRC1_BASE = 12'h7c1, CSR_DST_BASE = 12'h7c2,
@@ -31,6 +32,6 @@ package npu_isa_pkg;
     typedef enum logic [4:0] {
         OP_INVALID, OP_LUI, OP_ADDI, OP_ADD,
         OP_BEQ, OP_BNE, OP_JAL, OP_END,
-        OP_SETI, OP_CSRW, OP_CSRR, OP_TSTART, OP_TSTOP, OP_LOAD, OP_STORE, OP_LW, OP_SW
+        OP_SETI, OP_CSRW, OP_CSRR, OP_TSTART, OP_TSTOP, OP_LOAD, OP_STORE, OP_LW, OP_SW, OP_GEMM
     } scalar_op_t;
 endpackage

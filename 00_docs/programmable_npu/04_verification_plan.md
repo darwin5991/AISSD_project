@@ -90,15 +90,17 @@ Phase 3 실측 범위: 블록 I-08 및 메모리 M-01~09, 실제 LOAD의 T-02/�
 | G-03 | FC3 128→10 (A→B) | 유효 10bytes bit-exact, 마지막 2 padding byte 제외 |
 | G-04 | GEMM 연속 3회, 각각 CSR 변경 | 이전 `layer_config_lut` 순서와 동일 계산 |
 | G-05 | 서로 다른 Weight Set로 반복 실행 | 해당 선택한 내부 SRAM 데이터로 계산, Weight 잔류 재사용 확인 |
-| G-06 | `M>1`, `K%4 !=0`, Buffer depth 초과 | INVALID_CONFIG 또는 MEMORY_BOUNDS Fault |
+| G-06 | M/N/K/Shift/Mode·SRAM 역할·실제 깊이·복합 오류 | 형상은 INVALID_CONFIG, 역할은 INVALID_REGION, 깊이는 MEMORY_BOUNDS; Alignment→Region→Bounds→Config 우선순위 |
 | G-07 | R~R+6 Pipeline | input_valid, psum_valid, bias_load, result_load, out_we 시점 맞음 |
-| G-08 | D-02 짧은 K | K=4는 INVALID_CONFIG, 엔진 start/SRAM write 없음; K=8/12/16/32 분석 후 지원 하한 확정 |
+| G-08 | D-02 짧은 K | 선행 오류가 없는 K=4는 INVALID_CONFIG/start·write 없음; K=8/12/16/32 PASS 후 사용자 승인으로 정식 하한 K=8 확정 |
 | A-01 | ARGMAX signed negative/positive | signed 기준 최대 인덱스 반환 |
 | A-02 | ARGMAX tie / length=1,3,10 | 최솟값 인덱스 우선, 길이만큼만 비교 |
 | A-03 | FC3 N=10 padding | 10개만 비교, 나머지 2개 무시 |
 | A-04 | `ARG_LEN=0`/11, 잘못된 SRC | Fault 코드 정확 |
 
 Golden 계산은 기존 `03_model/generate_golden.py`, `03_model/golden/*`, 양자화 로직을 우선 활용하되 **최신 3-stage RTL과 현재 데이터 형식**에 대응하는지를 재검증해야 함. 과거의 측정 결과를 새 설계 PASS로 대체하지 말 것.
+
+Phase 5 실측 범위: G-01~08, 원자적 원본 Snapshot/live CSR 변경 무시, INT32 양방향 wrap와 기존 Saturation, raw 32bit field 검사, 동적 A/B/Weight/Bias offset·마지막 Word, GEMM next-PC/설정 복합 오류 및 runtime prefix 차단을 검증했다. T-03 및 LOAD+GEMM 합산 microbenchmark도 PASS다. 주 173 cases, K 경계 72 cases, Legacy FC 출력 326words, 매 누산/result 갱신의 실제 dump를 Python과 비교했다. [15_phase5_report.md](15_phase5_report.md). 전체 application/ARGMAX와 기존 메모리 명령의 PC/data 복합 오류 일반화는 별도 범위다.
 
 ## 6. 최종 응용 시나리오
 

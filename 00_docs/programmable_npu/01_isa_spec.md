@@ -130,7 +130,7 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 | `0x7C3` | `BIAS_BASE` | RW | GEMM Bias 내부 SRAM byte address |
 | `0x7C4` | `M` | RW | v1 프로파일은 `M=1`만 지원 |
 | `0x7C5` | `N` | RW | 유효 출력 요소 수, 1~512 |
-| `0x7C6` | `K` | RW | 입력 요소 수, 양수, 4의 배수; 초기 버전 K=4 미지원, 정확한 지원 하한은 Phase 5에서 확정 |
+| `0x7C6` | `K` | RW | 입력 요소 수, 양수, 4의 배수; 정식 지원 하한 K=8, K=4 미지원 |
 | `0x7C7` | `BIAS_SHIFT` | RW | signed -32~31, 실제 엔진 포트 6bit |
 | `0x7C8` | `OUT_SHIFT` | RW | unsigned 0~31, 실제 엔진 포트 5bit |
 | `0x7C9` | `ACT_MODE` | RW | 0=none, 1=ReLU |
@@ -145,8 +145,13 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 
 ## 5. GEMM의 유효 구성/레이아웃
 
+[Phase 5 사용자 확정](14_phase5_decisions.md): INT32 누산과 기존 Bias 정렬은 32bit 결과를 남기고 2의 보수 signed로 해석한다. 산술 Overflow는 Fault가 아니며 Output INT8 Saturation은 기존대로 적용한다. 설정 원본 32bit를 검증하기 전에 필드를 축소하지 않는다.
+GEMM 역할과 다른 Bank는 INVALID_REGION, 같은 SRC0/DST Buffer는 INVALID_CONFIG다. 메모리/설정 오류는 Alignment → Region → Bounds → Config 순서다. K=4의 Config 오류도 이 우선순위를 따른다.
+Phase 5 실제 검증에서 K=8/12/16/32와 출력 그룹·연속 실행이 PASS했고, 2026-11-24 사용자 후속 승인으로 최소 K=8을 정식 지원 하한으로 확정했다. [Phase 5 결과](15_phase5_report.md)를 따른다. GEMM의 next-PC Bounds와 설정 오류가 겹쳐도 Alignment → Region → Bounds → Config로 병합한다.
+
+
 - `EXEC GEMM` 한 번은 **하나의 FC 레이어(M=1)** 실행. 기존 MAC 4x4, INT8×INT8→signed32, 4-lane 누산·Bias·ReLU/Shift/Saturate 경로를 그대로 사용.
-- D-02: 초기 버전은 짧은 K용 bias staging을 추가하지 않는다. K=4는 EXEC 수락 시 INVALID_CONFIG Fault이며 GEMM start/SRAM write를 금지한다. 정확한 최소 지원 K는 Phase 5의 K=8/12/16/32 경계 분석·directed simulation 후 확정한다. 현재 기존 동작의 안전성이 알려진 K=128/512/784도 새 ISA 통합 PASS를 뜻하지 않는다.
+- D-02: 초기 버전은 짧은 K용 bias staging을 추가하지 않는다. K=4는 선행 오류가 없으면 EXEC 수락 시 INVALID_CONFIG Fault이며 GEMM start/SRAM write를 금지한다. 최소 지원 K=8은 Phase 5의 K=8/12/16/32 경계 분석·directed simulation PASS 후 사용자 승인으로 확정했다. 기존 FC K=128/512/784의 새 ISA 통합 결과는 Phase 5 보고서의 실제 PASS 범위를 따른다.
 - `K_words = K/4`, `output_groups = ceil(N/4)`; 출력 저장 워드 개수는 `output_groups`. 마지막 그룹의 N을 초과하는 lane은 0으로 패딩된 데이터로 취급하며 모델 packer가 해당 Weight/Bias를 0으로 채움. N 개 유효 출력 외의 lane은 정확도/ARGMAX 평가 대상이 아님.
 - `SRC0_BASE`: Buffer A 또는 B, `DST_BASE`: **반대쪽 Buffer**. 입력·출력은 동일 단일 포트 Buffer에 동시에 배치할 수 없음.
 - `SRC1_BASE`: **Weight Bank 0의 논리 창 주소**. 물리 Weight Bank 0..3은 그 **동일 word offset**을 병렬 Read. Weight는 `출력 그룹 → K_words` 순서, 각 은행에 4개의 output lane별 INT8 × input 4개를 한 워드에 배치.
