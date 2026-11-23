@@ -1,9 +1,10 @@
-// Decode only the Phase 1 instruction subset. Encoding errors precede GPR errors.
+// Phase 1 scalar + Phase 2 CSR/Timer. Encoding errors precede operand errors.
 module instruction_decoder (
     input logic [31:0] instruction,
     output npu_isa_pkg::scalar_op_t operation,
     output logic [4:0] rd, rs1, rs2,
     output logic [31:0] immediate,
+    output logic [11:0] csr_address,
     output logic writes_rd,
     output logic [7:0] error_code
 );
@@ -15,6 +16,7 @@ module instruction_decoder (
         rs1 = instruction[19:15];
         rs2 = instruction[24:20];
         immediate = 32'd0;
+        csr_address = instruction[31:20];
         writes_rd = 1'b0;
         uses_rd = 1'b0;
         uses_rs1 = 1'b0;
@@ -64,10 +66,37 @@ module instruction_decoder (
                 uses_rd = 1'b1;
                 writes_rd = 1'b1;
             end
+            OPC_SETI: begin
+                operation = OP_SETI;
+                csr_address = instruction[18:7];
+                immediate = {{19{instruction[31]}}, instruction[31:19]};
+            end
+            OPC_CSR: begin
+                case (instruction[14:12])
+                    3'b001: begin
+                        operation = OP_CSRW;
+                        uses_rs1 = 1'b1;
+                        if (instruction[11:7] != 5'd0)
+                            error_code = ERR_ILLEGAL_ENCODING;
+                    end
+                    3'b010: begin
+                        operation = OP_CSRR;
+                        uses_rd = 1'b1;
+                        writes_rd = 1'b1;
+                        if (instruction[19:15] != 5'd0)
+                            error_code = ERR_ILLEGAL_ENCODING;
+                    end
+                    default: error_code = ERR_ILLEGAL_ENCODING;
+                endcase
+            end
             OPC_NPU: begin
-                // All unused END fields must be zero; other NPU ops are later phases.
+                // Exact system encodings: every unused field must be zero.
                 if (instruction == INSN_END)
                     operation = OP_END;
+                else if (instruction == INSN_TSTART)
+                    operation = OP_TSTART;
+                else if (instruction == INSN_TSTOP)
+                    operation = OP_TSTOP;
                 else
                     error_code = ERR_ILLEGAL_ENCODING;
             end

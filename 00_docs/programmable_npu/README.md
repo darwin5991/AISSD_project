@@ -1,6 +1,6 @@
 # Programmable NPU v1.0 — 문서 색인
 
-> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1 Scalar/Fetch 구현·검증 PASS / Phase 2 이후 미구현**
+> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1~2 Scalar/Fetch/CSR/Timer 구현·검증 PASS / Phase 3 이후 미구현**
 >
 > 기존 `00_docs/architecture.md`는 **고정 3-Layer MLP 베이스라인**을 설명한다. 이 디렉터리는 그 RTL을 **명령어 구동 NPU**로 확장하기 위한 새로운 구현 계약이다. 기존 성능/정확도 수치를 새 설계의 검증 결과로 인용하지 않는다.
 
@@ -14,6 +14,7 @@
 6. [06_phase0_report.md](06_phase0_report.md): 기존 RTL 기준선 진단
 7. [07_design_decisions_phase0.md](07_design_decisions_phase0.md): D-01~D-04 확정 사항 (우선 적용)
 8. [08_phase1_report.md](08_phase1_report.md): Phase 1 구현·실행 검증 및 후속 범위
+9. [09_phase2_report.md](09_phase2_report.md): Phase 1 보존 커밋 및 Phase 2 CSR/Timer 검증
 
 ## 이번에 최종 확정한 선택
 

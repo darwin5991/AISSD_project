@@ -24,6 +24,8 @@ SOURCES = [
     "04_rtl/isa/instruction_decoder.sv",
     "04_rtl/isa/register_file.sv",
     "04_rtl/isa/scalar_alu.sv",
+    "04_rtl/isa/csr_file.sv",
+    "04_rtl/isa/perf_timer.sv",
     "04_rtl/isa/instruction_controller.sv",
     "04_rtl/controller/npu_top.sv",
     "05_tb/npu/tb_npu_phase1.sv",

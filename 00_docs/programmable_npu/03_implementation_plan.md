@@ -2,7 +2,7 @@
 
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
-**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 0 진단과 Phase 1 Scalar/Fetch 구현·검증을 완료했다. [Phase 1 실행 보고서](08_phase1_report.md)를 따르며, Phase 2는 별도 승인 전 진행하지 않는다.
+**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 1 Gate 승인 후 검증 소스를 d707e52에 커밋했고 Phase 2 CSR/Timer 구현·검증을 완료했다. [Phase 2 실행 보고서](09_phase2_report.md)를 따르며, Phase 3은 별도 승인 전 진행하지 않는다.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -41,6 +41,8 @@
 **완료 조건:** PC trace / GPR scoreboard와 bit-exact 일치, 완주 후 `done=1cycle`, Halt 뒤 추가 Fetch 없음. 기본 64KiB 및 별도 축소 IMEM 용량에서 zero fill, 마지막 word/용량 밖, taken/non-taken 잘못된 후보 target, JAL fault 시 link 불변, invalid GPR/encoding 우선순위, Reset 재시작을 확인한다. Phase 1 종료 후 보고하며 별도 승인 전 Phase 2로 진행하지 않는다.
 
 ## Phase 2 — CSR + SETI + Timer + Status/Error
+
+**실행 상태 (2026-11-24): PASS.** 64KiB/256B 각 98 scenarios·763 steps·75116 checks. CSR 4096주소·Timer 156에지 unit 및 테스트용 active 통합 PASS. 기존 Scalar 두 용량/Python 27 tests/Legacy RTL 5종 PASS. 실제 엔진 active 경계 및 EXEC snapshot 검사는 후속 단계다. 상세는 [09_phase2_report.md](09_phase2_report.md).
 
 **신규 후보:** `04_rtl/isa/csr_file.sv`, `04_rtl/isa/perf_timer.sv`, Fault Handling을 위한 `instruction_controller` 확장.
 

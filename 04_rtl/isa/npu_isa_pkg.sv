@@ -1,4 +1,4 @@
-// Programmable NPU v1.0 constants. Only Phase 1 scalar operations execute.
+// Programmable NPU v1.0: Phase 1 scalar and Phase 2 CSR/Timer constants.
 package npu_isa_pkg;
     localparam logic [31:0] IMEM_BASE = 32'h0000_0000;
     localparam logic [31:0] DMEM_BASE = 32'h1000_0000;
@@ -9,7 +9,16 @@ package npu_isa_pkg;
         OPC_ADD = 7'h33, OPC_BRANCH = 7'h63, OPC_JAL = 7'h6f,
         OPC_LW = 7'h03, OPC_SW = 7'h23, OPC_CSR = 7'h73,
         OPC_SETI = 7'h0b, OPC_NPU = 7'h2b;
-    localparam logic [31:0] INSN_END = 32'h0400_302b;
+    localparam logic [31:0] INSN_END = 32'h0400_302b,
+        INSN_TSTART = 32'h0000_302b, INSN_TSTOP = 32'h0200_302b;
+    localparam logic [11:0] CSR_SRC0_BASE = 12'h7c0,
+        CSR_SRC1_BASE = 12'h7c1, CSR_DST_BASE = 12'h7c2,
+        CSR_BIAS_BASE = 12'h7c3, CSR_M = 12'h7c4, CSR_N = 12'h7c5,
+        CSR_K = 12'h7c6, CSR_BIAS_SHIFT = 12'h7c7,
+        CSR_OUT_SHIFT = 12'h7c8, CSR_ACT_MODE = 12'h7c9,
+        CSR_ARG_SRC = 12'h7e0, CSR_ARG_LEN = 12'h7e1,
+        CSR_PERF_COUNT = 12'h7f0, CSR_PERF_OVERFLOW = 12'h7f1,
+        CSR_STATUS = 12'h7f2, CSR_ERROR_CODE = 12'h7f3;
 
     localparam logic [7:0] ERR_OK = 8'h00, ERR_INVALID_OPCODE = 8'h01,
         ERR_INVALID_GPR = 8'h02, ERR_INVALID_CSR = 8'h03,
@@ -21,6 +30,7 @@ package npu_isa_pkg;
 
     typedef enum logic [3:0] {
         OP_INVALID, OP_LUI, OP_ADDI, OP_ADD,
-        OP_BEQ, OP_BNE, OP_JAL, OP_END
+        OP_BEQ, OP_BNE, OP_JAL, OP_END,
+        OP_SETI, OP_CSRW, OP_CSRR, OP_TSTART, OP_TSTOP
     } scalar_op_t;
 endpackage

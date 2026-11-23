@@ -63,6 +63,8 @@ Phase 1 Gate는 I-01~04, I-09의 opcode/encoding/GPR 부분, I-10~12다. I-05~08
 
 ## 4. Timer 정확도
 
+Phase 2 실측 범위: I-06/07, I-09 CSR/RO/형식 Fault 및 T-01/06/07, 테스트용 LOAD/GEMM active 에지·OR·동적 PERF read를 검증했다. 실제 LOAD/GEMM/STORE/ARGMAX 명령과 마지막 SRAM write 경계는 Phase 4~6 통합 후 T-02~05 전체 항목을 검증해야 한다. [Phase 2 결과](09_phase2_report.md)는 이를 구분한다.
+
 | ID | Sequence | Counter 기대 동작 |
 |---|---|---|
 | T-01 | `TSTART`→Scalar/CSR→`TSTOP` | 0 |
@@ -73,7 +75,7 @@ Phase 1 Gate는 I-01~04, I-09의 opcode/encoding/GPR 부분, I-10~12다. I-05~08
 | T-06 | `TSTART` 두 번 / `TSTOP` 후 읽기 | 재시작 시 0, 정지 후 값 고정 |
 | T-07 | 단위 TB에서 counter overflow 유발 | 2³² wrap 및 sticky overflow=1 |
 
-오버플로 테스트는 실제 2³² 클럭을 기다리지 않고 Timer unit TB에서 내부 초기 카운트 설정용 **테스트 전용 훅/파라미터**를 이용하여 검증한다. 이 훅은 합성 대상 명세에 포함하지 않음. 활성 범위를 준수했는지 확인하려면 `engine_active`, final write, count를 waveform에서 같이 관찰.
+오버플로 테스트는 실제 2³² 클럭을 기다리지 않고 Timer unit TB에서 내부 초기 카운트 설정용 **테스트 전용 훅/파라미터 또는 TB 전용 force/release**를 이용하여 검증한다. 이 훅은 합성 대상 명세에 포함하지 않음. 활성 범위를 준수했는지 확인하려면 `engine_active`, final write, count를 waveform에서 같이 관찰.
 
 ## 5. GEMM/ARGMAX 정확도
 
