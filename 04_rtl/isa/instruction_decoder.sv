@@ -9,7 +9,7 @@ module instruction_decoder (
     output logic [7:0] error_code
 );
     import npu_isa_pkg::*;
-    logic uses_rd, uses_rs1, uses_rs2;
+    logic uses_rd, uses_rs1, uses_rs2; // LOAD/STORE use RD as read-only rs3.
     always_comb begin
         operation = OP_INVALID;
         rd = instruction[11:7];
@@ -90,8 +90,11 @@ module instruction_decoder (
                 endcase
             end
             OPC_NPU: begin
-                // Exact system encodings: every unused field must be zero.
-                if (instruction == INSN_END)
+                if ((instruction[14:12]==3'b000 || instruction[14:12]==3'b001) &&
+                    instruction[31:25]==7'd0) begin
+                    operation=(instruction[14:12]==3'b000)?OP_LOAD:OP_STORE;
+                    uses_rd=1'b1;uses_rs1=1'b1;uses_rs2=1'b1;
+                end else if (instruction == INSN_END)
                     operation = OP_END;
                 else if (instruction == INSN_TSTART)
                     operation = OP_TSTART;

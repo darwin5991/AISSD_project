@@ -1,7 +1,8 @@
 // Blocking scalar controller: request R, capture R+1, execute R+2.
 // CSR/Timer commit shares scalar fault checks. Engine inputs are qualified activity.
 module instruction_controller #(
-    parameter logic [32:0] IMEM_BYTES = npu_isa_pkg::DEFAULT_IMEM_BYTES
+    parameter logic [32:0] IMEM_BYTES = npu_isa_pkg::DEFAULT_IMEM_BYTES,
+    parameter logic [32:0] DMEM_BYTES = npu_isa_pkg::DEFAULT_DMEM_BYTES
 ) (
     input logic clk, rst_n, start,
     input logic load_engine_active, gemm_engine_active,
@@ -9,17 +10,29 @@ module instruction_controller #(
     output logic imem_en,
     output logic [31:0] imem_addr,
     input logic [31:0] imem_rdata,
+    output logic dmem_en,dmem_we,
+    output logic [31:0] dmem_addr,dmem_wdata,
+    input logic [31:0] dmem_rdata,
+    output logic sram_en,sram_we,
+    output logic [31:0] sram_address,sram_wdata,
+    input logic [31:0] sram_rdata,
+    input logic [7:0] sram_error,
+    output logic xfer_busy,xfer_load_active,
     output logic [31:0] status,
     output logic [7:0] error_code
 );
     import npu_isa_pkg::*;
     typedef enum logic [2:0] {
-        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT
+        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT
     } state_t;
     state_t state;
     logic [31:0] pc, instruction;
     scalar_op_t operation;
     logic [4:0] rd, rs1, rs2;
+    logic [31:0] transfer_src,transfer_dst,transfer_next_pc;
+    logic transfer_done,transfer_fault,is_transfer;
+    logic [7:0] transfer_fault_code;
+    logic [2:0] rs2_read_address;
     logic [31:0] immediate, rs1_data, rs2_data, alu_result;
     logic [11:0] csr_address;
     logic [31:0] csr_read_data, csr_write_data, register_write_data;
@@ -50,7 +63,7 @@ module instruction_controller #(
     );
     register_file u_register_file (
         .clk(clk), .rst_n(rst_n),
-        .rs1_addr(rs1[2:0]), .rs2_addr(rs2[2:0]),
+        .rs1_addr(rs1[2:0]), .rs2_addr(rs2_read_address),
         .rs1_data(rs1_data), .rs2_data(rs2_data),
         .write_en(register_write), .write_addr(rd[2:0]),
         .write_data(register_write_data)
@@ -69,9 +82,21 @@ module instruction_controller #(
     );
     perf_timer u_timer (
         .clk(clk), .rst_n(rst_n), .timer_start(timer_start), .timer_stop(timer_stop),
-        .load_active(load_engine_active), .gemm_active(gemm_engine_active),
+        .load_active(load_engine_active || xfer_load_active), .gemm_active(gemm_engine_active),
         .count(perf_count), .overflow(perf_overflow), .armed(timer_armed)
     );
+    block_transfer #(.DMEM_BYTES(DMEM_BYTES)) u_transfer(
+        .clk(clk),.rst_n(rst_n),.start(state==XFER_ARGS),
+        .is_store(operation==OP_STORE),.source_address(transfer_src),
+        .destination_address(transfer_dst),.length_bytes(rs2_data),
+        .busy(xfer_busy),.done(transfer_done),.fault(transfer_fault),
+        .load_active(xfer_load_active),.error_code(transfer_fault_code),
+        .dmem_en(dmem_en),.dmem_we(dmem_we),.dmem_addr(dmem_addr),
+        .dmem_wdata(dmem_wdata),.dmem_rdata(dmem_rdata),
+        .sram_en(sram_en),.sram_we(sram_we),.sram_address(sram_address),
+        .sram_wdata(sram_wdata),.sram_rdata(sram_rdata),.sram_error(sram_error));
+    assign is_transfer=(operation==OP_LOAD)||(operation==OP_STORE);
+    assign rs2_read_address=(state==XFER_ARGS)?rd[2:0]:rs2[2:0];
     assign csr_access = rst_n && (state == EXECUTE) &&
         ((operation == OP_SETI) || (operation == OP_CSRW) || (operation == OP_CSRR));
     assign csr_write_request = (operation == OP_SETI) || (operation == OP_CSRW);
@@ -86,7 +111,8 @@ module instruction_controller #(
     assign next_pc_error = check_pc(next_pc);
     assign imem_addr = pc;
     assign imem_en = rst_n && (state == FETCH_REQ) && (fetch_error == ERR_OK);
-    assign busy = (state == FETCH_REQ) || (state == FETCH_WAIT) || (state == EXECUTE);
+    assign busy = (state == FETCH_REQ) || (state == FETCH_WAIT) || (state == EXECUTE) ||
+        (state == XFER_ARGS) || (state == XFER_WAIT);
     assign fault = (state == FAULT_HALT);
     // No architectural write occurs on decode/target failure (including JAL link).
     assign register_write = instruction_commit && writes_rd;
@@ -96,6 +122,7 @@ module instruction_controller #(
             state <= IDLE;
             pc <= IMEM_BASE;
             instruction <= 32'd0;
+            transfer_src<=0;transfer_dst<=0;transfer_next_pc<=0;
             done <= 1'b0;
             status <= STATUS_RUNNING;
             error_code <= ERR_OK;
@@ -131,9 +158,21 @@ module instruction_controller #(
                         state <= FAULT_HALT;
                         status <= STATUS_ERROR;
                         error_code <= next_pc_error;
+                    end else if(is_transfer) begin
+                        transfer_src<=rs1_data;transfer_dst<=rs2_data;
+                        transfer_next_pc<=next_pc[31:0];state<=XFER_ARGS;
                     end else begin
                         pc <= next_pc[31:0];
                         state <= FETCH_REQ;
+                    end
+                end
+                XFER_ARGS: state<=XFER_WAIT;
+                XFER_WAIT: begin
+                    if(transfer_fault) begin
+                        state<=FAULT_HALT;status<=STATUS_ERROR;
+                        error_code<=transfer_fault_code;
+                    end else if(transfer_done) begin
+                        pc<=transfer_next_pc;state<=FETCH_REQ;
                     end
                 end
                 HALTED: begin end

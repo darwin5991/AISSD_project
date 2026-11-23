@@ -21,11 +21,17 @@ import run as legacy
 
 SOURCES = [
     "04_rtl/isa/npu_isa_pkg.sv",
+    "04_rtl/memory/npu_memory_pkg.sv",
     "04_rtl/isa/instruction_decoder.sv",
     "04_rtl/isa/register_file.sv",
     "04_rtl/isa/scalar_alu.sv",
     "04_rtl/isa/csr_file.sv",
     "04_rtl/isa/perf_timer.sv",
+    "04_rtl/memory/block_transfer.sv",
+    "04_rtl/memory/sram_address_decoder.sv",
+    "04_rtl/memory/sram_port_mux.sv",
+    "04_rtl/memory/single_port_bram.sv",
+    "04_rtl/memory/npu_memory_wrapper.sv",
     "04_rtl/isa/instruction_controller.sv",
     "04_rtl/controller/npu_top.sv",
     "05_tb/npu/tb_npu_phase1.sv",

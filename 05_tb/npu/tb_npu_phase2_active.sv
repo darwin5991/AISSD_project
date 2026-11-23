@@ -7,6 +7,11 @@ module tb_npu_phase2_active;
     wire [31:0] imem_addr,status;
     wire [7:0] error_code;
     logic [31:0] imem_rdata=0,imem[0:15];
+    // Interface adaptation only: this existing test executes no block transfers.
+    wire dmem_en,dmem_we,sram_en,sram_we,xfer_busy,xfer_load_active;
+    wire [31:0] dmem_addr,dmem_wdata,sram_address,sram_wdata;
+    logic [31:0] dmem_rdata=0,sram_rdata=0;
+    logic [7:0] sram_error=0;
     instruction_controller #(.IMEM_BYTES(64)) u_dut(.*);
     integer checks=0,cycles=0,age=0,commits=0;
     logic [31:0] word=0,expected_read=0,ref_count=0;

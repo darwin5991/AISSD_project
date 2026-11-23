@@ -24,6 +24,10 @@
 
 **검증 환경 권장 프로파일:** IMEM 64 KiB, DMEM 16 MiB(각각 Testbench 파라미터). DMEM의 예시 유효 범위는 `[0x1000_0000,0x1100_0000)`. 이는 **시뮬레이션 메모리 크기**이지 FPGA의 실제 온칩 BRAM 용량을 뜻하지 않는다. Top과 TB는 동일한 elaboration 파라미터 IMEM_BYTES/DMEM_BYTES를 공유한다. Fetch 경계는 적재 코드 길이가 아닌 IMEM 할당 용량이다. 기본 마지막 유효 word 시작 주소는 0x0000FFFC이며 0x00010000은 요청 전에 MEMORY_BOUNDS Fault다. TB는 미사용 IMEM 전체를 0으로 채운다. 미적재 영역의 0x00000000을 실제로 fetch하면 INVALID_OPCODE(0x01) Fault다. 실제 FPGA의 미사용 메모리 초기값은 이 TB zero fill로 보장되지 않는다 (D-03). 모든 프로그램/데이터는 범위 검사를 수행한다.
 
+### DMEM 오류 분류 (2026-11-24 추가 확정)
+
+[Phase 3 결정](10_phase3_decisions.md)에 따라 외부 DMEM 논리 영역은 상위 4bit=0x1인 [0x10000000,0x20000000)이다. 영역 안에서 DMEM_BYTES 용량을 넘으면 MEMORY_BOUNDS(0x06), 그 밖의 외부 주소는 INVALID_REGION(0x04)이다. 정렬 오류는 기존 우선순위를 따른다.
+
 ### 내부 SRAM 창 (각 128 KiB 간격, 실제 깊이는 별도)
 
 | SRAM | 논리 Base | 물리 깊이 | 실제 바이트 크기 |

@@ -63,7 +63,9 @@ Phase 1 Gate는 I-01~04, I-09의 opcode/encoding/GPR 부분, I-10~12다. I-05~08
 
 ## 4. Timer 정확도
 
-Phase 2 실측 범위: I-06/07, I-09 CSR/RO/형식 Fault 및 T-01/06/07, 테스트용 LOAD/GEMM active 에지·OR·동적 PERF read를 검증했다. 실제 LOAD/GEMM/STORE/ARGMAX 명령과 마지막 SRAM write 경계는 Phase 4~6 통합 후 T-02~05 전체 항목을 검증해야 한다. [Phase 2 결과](09_phase2_report.md)는 이를 구분한다.
+Phase 2 실측 범위: I-06/07, I-09 CSR/RO/형식 Fault 및 T-01/06/07, 테스트용 LOAD/GEMM active 에지·OR·동적 PERF read를 검증했다. [Phase 2 결과](09_phase2_report.md)를 보존한다.
+
+Phase 3 실측 범위: 블록 I-08 및 메모리 M-01~09, 실제 LOAD의 T-02/마지막 SRAM write 경계, T-04 중 STORE 제외를 검증했다. 7개 SRAM 전체 깊이·왕복·경계/정렬/영역/길이 Fault·runtime cursor Fault·비영 GPR/RW CSR 보존 및 실제 bus 에지/데이터를 Python Golden과 비교했다. [Phase 3 결과](11_phase3_report.md)의 94 cases와 owner 53 checks가 근거다. 실제 GEMM T-03, ARGMAX T-04 및 전체 프로그램 T-05는 Phase 5~7 통합 후 검증한다.
 
 | ID | Sequence | Counter 기대 동작 |
 |---|---|---|

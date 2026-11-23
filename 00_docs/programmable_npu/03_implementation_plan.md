@@ -2,7 +2,7 @@
 
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
-**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 1 Gate 승인 후 검증 소스를 d707e52에 커밋했고 Phase 2 CSR/Timer 구현·검증을 완료했다. [Phase 2 실행 보고서](09_phase2_report.md)를 따르며, Phase 3은 별도 승인 전 진행하지 않는다.
+**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 2 검증 상태를 69410b4에 보존한 뒤, 사용자 승인에 따라 Phase 3 블록 LOAD/STORE·SRAM·실제 LOAD Timer 구현과 검증을 완료했다. [Phase 3 실행 보고서](11_phase3_report.md)의 Gate PASS를 보고하며, 사용자 승인 전 Phase 4 Scalar LW/SW로 진행하지 않는다.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -52,15 +52,9 @@
 
 **완료 조건:** 모든 CSR ID와 기계어 인코딩이 문서·Python assembler·SV decoder에 공통으로 반영, Timer directed tests PASS.
 
-## Phase 3 — 외부 IMEM/DMEM 모델, Scalar LW/SW, 주소 검증
+## Phase 3 — 내부 SRAM MUX + Block LOAD/STORE
 
-**신규 후보:** `04_rtl/isa/external_memory_port.sv` 또는 `dmem_request_mux.sv`(필요 시), `05_tb/npu/npu_memory_model.sv`, `05_tb/npu/tb_npu_scalar.sv`.
-
-**수행:** 동기식 고정 1-cycle IMEM/DMEM 32bit Single-Port TB. CPU `LW/SW`만 외부 DMEM 범위 지원; `S/B/I/U/J` Immediate decoding/Word Alignment, memory region+bounds faults.
-
-**완료 조건:** Address+WriteData+ReadData를 waveform과 scoreboard로 검증; Read 요청 edge R와 소비 edge R+1 규칙 PASS.
-
-## Phase 4 — 내부 SRAM MUX + Block LOAD/STORE
+**실행 상태 (2026-11-24): PASS.** 256KiB 87 cases·2124 steps·6711895 checks, 기본 16MiB 7 cases·156 steps·9097 checks, SRAM owner 53 checks. Phase 1/2 및 Legacy 5종 회귀 PASS. [11_phase3_report.md](11_phase3_report.md).
 
 **기존 파일 검토:** `04_rtl/memory/memory_wrapper.sv`, `memory_port_mux.sv`, `buffer_router.sv`, `tb_address_decoder.sv`, `tb_read_mux.sv`. **신규 후보:** `npu_memory_wrapper.sv`, `sram_address_decoder.sv`, `sram_port_mux.sv`, `block_transfer.sv`.
 
@@ -75,6 +69,16 @@
 **테스트:** 1word, 2word, full Buffer A/B, Weight Bank 0/1/2/3(각 29280word), Bias 163word; SRAM 깊이+1, 예약 창 구멍, misalign, zero length, read hold, 경계/32bit 주소 wrap, LOAD→STORE round-trip, 완료 이전 다음 Fetch 차단.
 
 **완료 조건:** SRAM 모든 Bank bit-exact copy, 비정상 접근 Fault, 타이머 LOAD active count와 TB 실제 active edge 수 일치. 기존 RAM 1clk 계약 유지.
+
+> 2026-11-24 사용자 승인: 블록 LOAD/STORE를 Phase 3으로 앞당기고 Scalar LW/SW는 후속 Phase 4 승인 범위로 남긴다. Phase 3 Gate PASS이며, 상세 결과는 [11_phase3_report.md](11_phase3_report.md)에 기록했다. Phase 4는 미시작이다.
+
+## Phase 4 — 외부 IMEM/DMEM 모델, Scalar LW/SW, 주소 검증
+
+**신규 후보:** `04_rtl/isa/external_memory_port.sv` 또는 `dmem_request_mux.sv`(필요 시), `05_tb/npu/npu_memory_model.sv`, `05_tb/npu/tb_npu_scalar.sv`.
+
+**수행:** 동기식 고정 1-cycle IMEM/DMEM 32bit Single-Port TB. CPU `LW/SW`만 외부 DMEM 범위 지원; `S/B/I/U/J` Immediate decoding/Word Alignment, memory region+bounds faults.
+
+**완료 조건:** Address+WriteData+ReadData를 waveform과 scoreboard로 검증; Read 요청 edge R와 소비 edge R+1 규칙 PASS.
 
 ## Phase 5 — GEMM 1회 실행 엔진 통합
 
@@ -132,8 +136,8 @@
 | 0 | 기존 RTL 기준선 | 기존 시뮬레이션/현재 제한 확인 |
 | 1 | Fetch/ALU/Branch | Branch loop·PC·GPR PASS |
 | 2 | CSR/Timer/Error | CSR·Timer·Fault PASS |
-| 3 | 외부 LW/SW | DMEM 동기 1clk 동작 PASS |
-| 4 | SRAM/Block XFER | 모든 Bank LOAD/STORE PASS |
+| 3 | SRAM/Block XFER (사용자 범위 재정의) | 모든 Bank LOAD/STORE 및 Timer/Fault PASS |
+| 4 | 외부 Scalar LW/SW (후속 승인) | DMEM 동기 1clk 동작 PASS |
 | 5 | GEMM | FC1/2/3 Golden bit-exact PASS |
 | 6 | ARGMAX/Halt | 유효/오류 경로 PASS |
 | 7 | Python/Testbench | 소량/10k Accuracy PASS |

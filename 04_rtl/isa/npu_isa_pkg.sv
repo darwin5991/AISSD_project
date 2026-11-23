@@ -31,6 +31,6 @@ package npu_isa_pkg;
     typedef enum logic [3:0] {
         OP_INVALID, OP_LUI, OP_ADDI, OP_ADD,
         OP_BEQ, OP_BNE, OP_JAL, OP_END,
-        OP_SETI, OP_CSRW, OP_CSRR, OP_TSTART, OP_TSTOP
+        OP_SETI, OP_CSRW, OP_CSRR, OP_TSTART, OP_TSTOP, OP_LOAD, OP_STORE
     } scalar_op_t;
 endpackage

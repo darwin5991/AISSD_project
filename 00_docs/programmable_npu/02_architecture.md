@@ -4,7 +4,7 @@
 
 **근거 RTL:** `04_rtl/controller/mlp_top.sv`, `control_unit.sv`, `pipeline_control.sv`, `read_issue_control.sv`, `address_generator.sv`, `layer_config_lut.sv`, `argmax_*`, `04_rtl/memory/memory_wrapper.sv`, `memory_port_mux.sv`, `buffer_router.sv`, `single_port_bram.sv`, `04_rtl/mac_array/*`, `04_rtl/accumulator_postprocess/*` (2026-11-24 GitHub 기본 브랜치 확인). **기존 문서:** `00_docs/architecture.md`, `00_docs/mac_input_pipeline.md`.
 
-현재 구현은 [Phase 2 보고서](09_phase2_report.md)의 Scalar/Fetch/CSR/Timer까지다. 아래 전체 엔진/SRAM/외부 DMEM 실행 구조는 후속 Phase의 설계 목표이며, 현재 구현 완료를 의미하지 않는다.
+현재 구현은 [Phase 3 보고서](11_phase3_report.md)의 Scalar/Fetch/CSR/Timer, 직렬 Block LOAD/STORE, 내부 SRAM 7개와 외부 DMEM 연결까지다. Scalar LW/SW 및 신규 NPU GEMM/ARGMAX 실행은 후속 승인 범위다. [10번 결정](10_phase3_decisions.md)의 Phase 재정의와 DMEM 오류 영역 구분을 적용한다.
 
 ## 1. 최상위 구조
 
@@ -153,7 +153,7 @@ Write:
 | `gemm_controller` | counters, FSM, pipeline tags | 1 GEMM 실행, MAC Read/Write 스케줄, done |
 | `argmax_engine` | index, read/compare phase | 가변 1~10 signed INT8 비교, 결과 |
 
-Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. 값 범위 검증과 EXEC snapshot은 아직 구현하지 않았다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 세며, 현재 npu_top은 두 입력을 0에 연결한다. 외부 Top test 포트를 추가하지 않고 별도 TB에서 Timer/controller 입력에 테스트용 activity를 공급한다.
+Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. 값 범위 검증과 EXEC snapshot은 아직 구현하지 않았다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 센다. Phase 3의 npu_top은 실제 Block Transfer LOAD active를 연결하며 GEMM active는 아직 0이다. 별도 TB의 기존 테스트용 activity 입력은 유지한다. 신규 npu_memory_wrapper는 기존 single_port_bram 7개를 같은 깊이와 1clk read로 재사용하고 XFER/GEMM/ARGMAX 포트를 분리한다. 새 output data register는 없으며 GEMM/ARGMAX 엔진은 현재 비활성이다. 외부 DMEM은 byte address의 32bit Single-Port 고정 동기 read이고, read R 수락 → R+1 capture → R+2 write로 직렬 전송한다.
 
 ### Instruction Controller FSM 권장
 
