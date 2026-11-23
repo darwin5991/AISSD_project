@@ -10,6 +10,11 @@ module instruction_controller #(
     output logic [31:0] gemm_config [0:9],
     input logic gemm_done,gemm_fault,
     input logic [7:0] gemm_config_error,gemm_error_code,
+    output logic argmax_start,
+    output logic [31:0] argmax_config [0:1],
+    input logic argmax_done,argmax_fault,
+    input logic [7:0] argmax_config_error,argmax_error_code,
+    input logic [3:0] argmax_result,
     output logic busy, done, fault,
     output logic imem_en,
     output logic [31:0] imem_addr,
@@ -26,11 +31,17 @@ module instruction_controller #(
     output logic [7:0] error_code
 );
     import npu_isa_pkg::*;
-    typedef enum logic [3:0] {
-        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT, MEM_REQ, MEM_WAIT, GEMM_CHECK, GEMM_START, GEMM_WAIT, XFER_REJECT
+    typedef enum logic [4:0] {
+        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT, MEM_REQ, MEM_WAIT, GEMM_CHECK, GEMM_START, GEMM_WAIT, XFER_REJECT, ARG_CHECK, ARG_START, ARG_WAIT
     } state_t;
     state_t state;
     wire [31:0] gemm_settings [0:9];
+    wire [31:0] argmax_settings [0:1];
+    logic [31:0] argmax_next_pc;
+    logic [4:0] argmax_rd;
+    logic [7:0] argmax_next_pc_error,argmax_check_error;
+    logic argmax_writeback;
+    logic [2:0] register_write_address;
     logic [31:0] gemm_next_pc;
     logic [7:0] gemm_next_pc_error,gemm_check_error;
     function automatic logic [2:0] memory_error_rank(input logic [7:0] code);
@@ -48,6 +59,9 @@ module instruction_controller #(
         else merge_memory_errors=(memory_error_rank(first)<=memory_error_rank(second))?first:second;
     endfunction
     assign gemm_check_error=merge_memory_errors(gemm_next_pc_error,gemm_config_error);
+    assign argmax_check_error=merge_memory_errors(argmax_next_pc_error,argmax_config_error);
+    assign argmax_start=rst_n && state==ARG_START;
+    assign argmax_writeback=rst_n && state==ARG_WAIT && argmax_done && !argmax_fault && argmax_rd!=0;
     logic is_scalar_memory;
     logic [32:0] scalar_effective;
     logic [7:0] scalar_memory_error,scalar_check_error;
@@ -105,7 +119,7 @@ module instruction_controller #(
         .clk(clk), .rst_n(rst_n),
         .rs1_addr(rs1[2:0]), .rs2_addr(rs2_read_address),
         .rs1_data(rs1_data), .rs2_data(rs2_data),
-        .write_en(register_write), .write_addr(rd[2:0]),
+        .write_en(register_write), .write_addr(register_write_address),
         .write_data(register_write_data)
     );
     scalar_alu u_alu (
@@ -116,7 +130,7 @@ module instruction_controller #(
         .clk(clk), .rst_n(rst_n), .access_en(csr_access),
         .write_request(csr_write_request), .commit_en(instruction_commit),
         .address(csr_address), .write_data(csr_write_data),
-        .read_data(csr_read_data), .access_error(csr_error), .gemm_settings(gemm_settings),
+        .read_data(csr_read_data), .access_error(csr_error), .gemm_settings(gemm_settings), .argmax_settings(argmax_settings),
         .perf_count(perf_count), .perf_overflow(perf_overflow),
         .status(status), .error_code(error_code)
     );
@@ -138,6 +152,7 @@ module instruction_controller #(
     assign transfer_data_error=npu_memory_pkg::transfer_error(transfer_src,transfer_dst,
         rs2_data,operation==OP_STORE,DMEM_BYTES);
     assign transfer_check_error=merge_memory_errors(transfer_pc_error,transfer_data_error);
+    assign register_write_address=(state==ARG_WAIT)?argmax_rd[2:0]:rd[2:0];
     assign gemm_start=rst_n && state==GEMM_START;
     assign is_scalar_memory=(operation==OP_LW)||(operation==OP_SW);
     // Base is unsigned, immediate is signed. Keep carry/borrow before truncation.
@@ -161,12 +176,13 @@ module instruction_controller #(
         ((operation == OP_SETI) || (operation == OP_CSRW) || (operation == OP_CSRR));
     assign csr_write_request = (operation == OP_SETI) || (operation == OP_CSRW);
     assign csr_write_data = (operation == OP_SETI) ? immediate : rs1_data;
-    assign register_write_data = (operation == OP_LW) ? dmem_rdata :
+    assign register_write_data = (state==ARG_WAIT) ? {28'd0,argmax_result} :
+        (operation == OP_LW) ? dmem_rdata :
         ((operation == OP_CSRR) ? csr_read_data : alu_result);
     assign execute_error = (decode_error != ERR_OK) ? decode_error : csr_error;
     assign instruction_commit = rst_n && (state == EXECUTE) &&
         (execute_error == ERR_OK) && (operation != OP_END) &&
-        !is_scalar_memory && operation!=OP_GEMM && (next_pc_error == ERR_OK);
+        !is_scalar_memory && operation!=OP_GEMM && operation!=OP_ARGMAX && (next_pc_error == ERR_OK);
     assign timer_start = instruction_commit && (operation == OP_TSTART);
     assign timer_stop = instruction_commit && (operation == OP_TSTOP);
     assign fetch_error = check_pc({1'b0, pc});
@@ -177,11 +193,11 @@ module instruction_controller #(
         (state == XFER_ARGS) || (state == XFER_WAIT) ||
         (state == MEM_REQ) || (state == MEM_WAIT) ||
         (state == GEMM_CHECK) || (state == GEMM_START) || (state == GEMM_WAIT) ||
-        (state == XFER_REJECT);
+        (state == XFER_REJECT) || (state==ARG_CHECK) || (state==ARG_START) || (state==ARG_WAIT);
     assign fault = (state == FAULT_HALT);
     // No architectural write occurs on decode/target failure (including JAL link).
     assign register_write = (instruction_commit && writes_rd) ||
-        (rst_n && state==MEM_WAIT && operation==OP_LW);
+        (rst_n && state==MEM_WAIT && operation==OP_LW) || argmax_writeback;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -193,6 +209,8 @@ module instruction_controller #(
             scalar_address<=0;scalar_write_data<=0;scalar_next_pc<=0;
             gemm_next_pc<=0;gemm_next_pc_error<=ERR_OK;
             for(integer g=0;g<10;g++) gemm_config[g]<=0;
+            for(integer a=0;a<2;a++) argmax_config[a]<=0;
+            argmax_next_pc<=0;argmax_next_pc_error<=ERR_OK;argmax_rd<=0;
             done <= 1'b0;
             status <= STATUS_RUNNING;
             error_code <= ERR_OK;
@@ -228,6 +246,10 @@ module instruction_controller #(
                         // Snapshot first, then merge all memory/config errors by ISA priority.
                         for(integer g=0;g<10;g++) gemm_config[g]<=gemm_settings[g];
                         gemm_next_pc<=next_pc[31:0];gemm_next_pc_error<=next_pc_error;state<=GEMM_CHECK;
+                    end else if(operation==OP_ARGMAX) begin
+                        for(integer a=0;a<2;a++) argmax_config[a]<=argmax_settings[a];
+                        argmax_rd<=rd;argmax_next_pc<=next_pc[31:0];
+                        argmax_next_pc_error<=next_pc_error;state<=ARG_CHECK;
                     end else if(is_scalar_memory) begin
                         if(scalar_check_error!=ERR_OK) begin
                             state<=FAULT_HALT;status<=STATUS_ERROR;
@@ -262,6 +284,17 @@ module instruction_controller #(
                     if(gemm_fault) begin
                         state<=FAULT_HALT;status<=STATUS_ERROR;error_code<=gemm_error_code;
                     end else if(gemm_done) begin pc<=gemm_next_pc;state<=FETCH_REQ;end
+                end
+                ARG_CHECK: begin
+                    if(argmax_check_error!=ERR_OK) begin
+                        state<=FAULT_HALT;status<=STATUS_ERROR;error_code<=argmax_check_error;
+                    end else state<=ARG_START;
+                end
+                ARG_START: state<=ARG_WAIT;
+                ARG_WAIT: begin
+                    if(argmax_fault) begin
+                        state<=FAULT_HALT;status<=STATUS_ERROR;error_code<=argmax_error_code;
+                    end else if(argmax_done) begin pc<=argmax_next_pc;state<=FETCH_REQ;end
                 end
                 XFER_ARGS: begin
                     // Third operand is available here; reject before any engine start.

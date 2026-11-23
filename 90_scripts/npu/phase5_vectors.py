@@ -182,7 +182,7 @@ def fixtures(capacity,full,debug=False):
         for i,v in changes.items():c[i]=v
         b.cfg(c);b.words += [p2.TSTART,GEMM]
         cases.append(b.finish("fault_"+name))
-    for name,word in [("rd",GEMM|(1<<7)),("rs1",GEMM|(31<<15)),("rs2",GEMM|(31<<20)),("argmax_reserved",GEMM|(1<<25))]:
+    for name,word in [("rd",GEMM|(1<<7)),("rs1",GEMM|(31<<15)),("rs2",GEMM|(31<<20)),("reserved_exec_funct7",GEMM|(2<<25))]:
         b=Builder(capacity);b.words += [word];cases.append(b.finish("encoding_"+name))
     b=Builder(capacity);b.cfg(base)
     pos=len(b.words);b.words += [s.jal(0,4092-4*pos)]

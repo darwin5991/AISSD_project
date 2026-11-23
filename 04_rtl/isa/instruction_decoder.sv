@@ -115,6 +115,11 @@ module instruction_decoder (
                     operation = OP_END;
                 else if (instruction == INSN_GEMM)
                     operation = OP_GEMM;
+                else if (instruction[14:12]==3'b010 && instruction[31:25]==7'd1) begin
+                    operation=OP_ARGMAX;uses_rd=1'b1;writes_rd=1'b1;
+                    if(instruction[19:15]!=0 || instruction[24:20]!=0)
+                        error_code=ERR_ILLEGAL_ENCODING;
+                end
                 else if (instruction == INSN_TSTART)
                     operation = OP_TSTART;
                 else if (instruction == INSN_TSTOP)

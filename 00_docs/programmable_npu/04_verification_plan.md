@@ -94,13 +94,87 @@ Phase 3 실측 범위: 블록 I-08 및 메모리 M-01~09, 실제 LOAD의 T-02/�
 | G-07 | R~R+6 Pipeline | input_valid, psum_valid, bias_load, result_load, out_we 시점 맞음 |
 | G-08 | D-02 짧은 K | 선행 오류가 없는 K=4는 INVALID_CONFIG/start·write 없음; K=8/12/16/32 PASS 후 사용자 승인으로 정식 하한 K=8 확정 |
 | A-01 | ARGMAX signed negative/positive | signed 기준 최대 인덱스 반환 |
-| A-02 | ARGMAX tie / length=1,3,10 | 최솟값 인덱스 우선, 길이만큼만 비교 |
+| A-02 | ARGMAX tie / length=1,3,4,9,10 | 동점 중 가장 작은 인덱스 우선, 길이만큼만 비교 |
 | A-03 | FC3 N=10 padding | 10개만 비교, 나머지 2개 무시 |
-| A-04 | `ARG_LEN=0`/11, 잘못된 SRC | Fault 코드 정확 |
+| A-04 | `ARG_LEN=0`/11, 잘못된 SRC | P6-D-01/D-02의 Alignment→Region→Bounds→Config, invalid 길이도 전체 범위 검사 |
 
 Golden 계산은 기존 `03_model/generate_golden.py`, `03_model/golden/*`, 양자화 로직을 우선 활용하되 **최신 3-stage RTL과 현재 데이터 형식**에 대응하는지를 재검증해야 함. 과거의 측정 결과를 새 설계 PASS로 대체하지 말 것.
 
-Phase 5 실측 범위: G-01~08, 원자적 원본 Snapshot/live CSR 변경 무시, INT32 양방향 wrap와 기존 Saturation, raw 32bit field 검사, 동적 A/B/Weight/Bias offset·마지막 Word, GEMM next-PC/설정 복합 오류 및 runtime prefix 차단을 검증했다. T-03 및 LOAD+GEMM 합산 microbenchmark도 PASS다. 주 173 cases, K 경계 72 cases, Legacy FC 출력 326words, 매 누산/result 갱신의 실제 dump를 Python과 비교했다. [15_phase5_report.md](15_phase5_report.md). 전체 application/ARGMAX와 기존 메모리 명령의 PC/data 복합 오류 일반화는 별도 범위다.
+Phase 5 실측 범위: G-01~08, 원자적 원본 Snapshot/live CSR 변경 무시, INT32 양방향 wrap와 기존 Saturation, raw 32bit field 검사, 동적 A/B/Weight/Bias offset·마지막 Word, GEMM next-PC/설정 복합 오류 및 runtime prefix 차단을 검증했다. T-03 및 LOAD+GEMM 합산 microbenchmark도 PASS다. 주 173 cases, K 경계 72 cases, Legacy FC 출력 326words, 매 누산/result 갱신의 실제 dump를 Python과 비교했다. [15_phase5_report.md](15_phase5_report.md). 기존 메모리 명령의 PC/data 복합 오류 일반화는 이후 [16번 후속 보고서](16_memory_fault_priority_report.md)에서 완료했다. 독립 ARGMAX는 후속 Phase 6에서 구현·검증했고 아래 결과를 따른다. 전체 application/10,000장 검증은 Phase 7 범위다.
+
+### 5.1 Phase 6 ARGMAX 테스트 명세 및 실행 결과 — Gate PASS
+
+[17번 P6-D-01/P6-D-02](17_phase6_decisions.md)를 기준으로 테스트 항목과 기대값을 확정한다. 후속 구현 승인 후 RTL/TB/Python Golden을 구현하고 A-01~A-16/A-B01~18/A-P01~07을 실제 실행해 PASS했다. 최종 411회 실행·2,983,083 RTL checks·517,258 Python 비교·599개 ARGMAX 비교 상태, 두 IMEM의 PC Fault 216회 및 전체 회귀 PASS다. [18번 보고서](18_phase6_report.md)의 로그/파형/source hash를 따른다. 아래 0x00은 사전 검증 성공이며 실제 PASS 근거는 해당 실행 기록이다.
+
+| ID | 추가 테스트 | 합격 기준 (실행 PASS) |
+|---|---|---|
+| A-05 | ARG_SRC/LEN 원자적 Snapshot | 수락 에지의 두 원본 32bit를 함께 보관; TB 전용 live CSR 변경을 실제 관찰하고 Snapshot 실행 불변 확인 |
+| A-06 | 실제 A/B 경계 | 아래 A-B 매트릭스의 시작/끝/범위/길이 오류 코드 및 요청 차단 |
+| A-07 | ARG_LEN 원본·산술 폭 | 0x10000001, 0xFFFFFFFC/FD/FFFFFFFF의 W/B/E와 Bounds; 하위 비트 alias·32bit L+3/4W wrap 금지 |
+| A-08 | 마지막 IMEM 복합 Fault | 아래 A-P 매트릭스; Alignment/Region이 next-PC Bounds보다 우선, Config보다 Bounds 우선 |
+| A-09 | Fault 무부작용·Halt | Engine start/DMEM/7개 SRAM 접근/Writeback=0, PC/GPR/RW CSR 보존, STATUS=2·최초 코드 sticky, Halt 중 start 무시 |
+| A-10 | A/B source 역할·offset | A/B 및 비영 word offset 정상; 각 Weight bank/Bias/DMEM/IMEM/MMIO/예약 SRAM 창은 0x04 |
+| A-11 | Encoding/GPR/CSR 선행 오류 | 예약 funct/rs1/rs2=0 위반은 0x08, 유효 형식 rd=r8~r31은 0x02; 데이터·PC 오류가 겹쳐도 선행. CSR 오류는 해당 SETI/CSRW/CSRR에서 0x03 |
+| A-12 | GPR 결과·r0 버림 | 초기 rd 비영 값, 정상 index의 상위 28bit=0; r0도 검사·Read·비교 후 결과만 버림 |
+| A-13 | 독립·연속 실행 | GEMM 뒤 별도 EXEC, A/B·길이·최대 위치 변경 연속 실행; 새 index/첫 값 초기화, 이전 결과 잔류 없음 |
+| A-14 | T-04 Timer 제외 | 준비 LOAD 후 TSTART→STORE→ARGMAX→TSTOP=0; 앞선 LOAD/GEMM의 비영 count와 armed/overflow도 실행/Fault 동안 보존 |
+| A-15 | Read/최종 비교/Writeback | R 요청·R+1 소비, 마지막 비교 뒤 안정된 결과만 GPR에 기록; 내부 argmax_done 1회, Top done은 END에서만 1클럭 |
+| A-16 | Reset·상태 보존 | 실행 중 PC/GPR/RW CSR 유지, busy 중 start 무시, 도중 Reset 취소, 정상/오류 Halt 뒤 Reset 재실행 |
+
+A-01~03은 -128/-1/0/127 및 모두 음수, 최대가 첫/중간/마지막 위치, 워드 경계를 넘는 동점, 최대가 갱신되지 않는 경우를 포함한다. LEN=1/3/4/9/10을 A/B 양쪽에서 검증한다. 유효 10개는 음수이고 padding 2개는 +127인 데이터로 padding 비교 금지를 확인한다. 독립 Golden의 예: [-128,-1,0,127]→3, [-128,-5,-8]→1, [-5,7,7,-1]→1. LEN=1은 값과 관계없이 index=0이다.
+
+#### A-B: ARG_LEN 및 실제 Buffer 경계 기대값
+
+아래 각 행은 정상 next-PC, 유효 인코딩/GPR를 전제로 **A/B 각각** 수행한다. base는 선택 Buffer 시작, T는 실제 끝(exclusive)이며 A의 T=0x80000310, B의 T=0x80020200이다. W는 원본 unsigned L에서 넓게 계산한 ceil(L/4)다.
+
+| ID | ARG_SRC | 원본 ARG_LEN | W | 기대 ERROR_CODE/동작 |
+|---|---|---:|---:|---|
+| A-B01 | base | 0 | 0 | 0x07, Read 없음 |
+| A-B02 | base | 11 | 3 | 0x07, Read 없음 |
+| A-B03 | T−4 | 4 | 1 | 0x00, 마지막 word 1회 Read |
+| A-B04 | T−4 | 5 | 2 | 0x06, 전체 범위 초과 |
+| A-B05 | T−12 | 10 | 3 | 0x00, 3회 Read·유효 10개만 비교 |
+| A-B06 | T−8 | 10 | 3 | 0x06 |
+| A-B07 | T−12 | 11 | 3 | 0x07, 범위는 맞지만 Configuration 오류 |
+| A-B08 | T−8 | 11 | 3 | 0x06, invalid 길이여도 Bounds 우선 |
+| A-B09 | T | 0 | 0 | 0x06, 시작 Bounds; W−1 underflow 금지 |
+| A-B10 | T | 1 | 1 | 0x06, 실제 깊이 바로 밖 |
+| A-B11 | base+1 | 0 | 0 | 0x05, Alignment 우선 |
+| A-B12 | base | 0x00000010 | 4 | 0x07, 유효 범위지만 길이 16 |
+| A-B13 | base | 0x10000001 | 0x04000001 | 0x06, 하위 4bit=1로 자르지 않음 |
+| A-B14 | base | 0xFFFFFFFC | 0x3FFFFFFF | 0x06, 넓은 전체 범위 |
+| A-B15 | base | 0xFFFFFFFD | 0x40000000 | 0x06, L+3 올림 산술 wrap 금지 |
+| A-B16 | base | 0xFFFFFFFF | 0x40000000 | 0x06, B=0x100000000; 32bit 절단 금지 |
+| A-B17 | T−4 | 1 / 3 | 1 | 0x00, 길이 정렬 조건 없음 |
+| A-B18 | T−12 | 9 | 3 | 0x00, 마지막 3byte padding 무시 |
+
+추가 Region/우선순위 사례: 정렬된 Weight 0~3/Bias/DMEM/IMEM/MMIO/예약 창을 source로 두고 LEN=0/11/0xFFFFFFFF를 적용하면 0x04가 Bounds/Config보다 우선한다. 같은 source를 비정렬로 만들면 0x05다. A/B 창의 실제 깊이 밖 주소는 0x04가 아니라 0x06이다. 시작 주소/길이 조합별 모든 Fault에서 요청은 0회여야 한다.
+
+#### A-P: ARGMAX 데이터 오류 + next-PC Bounds
+
+ARGMAX를 IMEM_BYTES−4에 둔다. 4KiB IMEM에서는 PC=0xFFC, 기본 64KiB에서는 PC=0xFFFC다. 두 용량에서 아래 기대 우선순위를 확인한다.
+
+| ID | 데이터/설정 조건 | 동시에 발생하는 오류 | 기대 ERROR_CODE |
+|---|---|---|---|
+| A-P01 | ARG_SRC=base+1, LEN=0 | Alignment + Config + next-PC Bounds | 0x05 |
+| A-P02 | 정렬된 Weight/Bias/DMEM source, LEN=0/11 | Region + Config + next-PC Bounds | 0x04 |
+| A-P03 | ARG_SRC=T−8, LEN=11 | 데이터 Bounds + Config + next-PC Bounds | 0x06 |
+| A-P04 | 정상 ARG_SRC/LEN=1/3/4/9/10 | next-PC Bounds만 발생 | 0x06 |
+| A-P05 | ARG_SRC=base, LEN=0/11 | Config + next-PC Bounds | 0x06 |
+| A-P06 | 잘못된 Encoding 및 rd와 데이터 오류 | Encoding + GPR + 데이터/PC 오류 | 0x08 |
+| A-P07 | 유효 형식, rd=r8/r31 및 데이터 오류 | GPR + 데이터/PC 오류 | 0x02 |
+
+A-P01~05는 A/B 각각 및 Timer armed/unarmed, rd=r0/비영 유효 GPR에서도 확인한다. r1~r7과 RW CSR을 비영 값으로 준비하고, 정상 LOAD/STORE로 SRAM/DMEM guard를 구성한 뒤 Fault를 발생시킨다. 목표 명령의 Engine start·논리 Read 요청·실제 RAM enable·모든 write가 0이고 PC/GPR/RW CSR 및 Timer Count/armed/overflow가 그대로인지 검사한다. STATUS/ERROR_CODE의 Fault 기록은 정상 상태 변화로 구분한다. Halt에서도 위 조건을 계속 확인하고 Reset 후 정상 프로그램 재실행을 검증한다.
+
+#### Python·RTL 비교, 파형 및 회귀 계획
+
+Python은 packed bytes를 signed INT8로 풀고 처음 L개에서 최초 최대 인덱스를 계산한다. W/B/E와 오류 코드는 Python의 넓은 정수 및 위 수동 기대값으로 독립 계산하며 RTL 출력으로 기대값을 만들지 않는다.
+
+정상 프로그램은 LOAD로 SRAM 준비 → EXEC ARGMAX → SW 결과 → END를 실행하고 실제 DMEM dump를 Python과 비교한다. 선택 Buffer의 Read 횟수 W/주소/데이터, PC/GPR/CSR/Timer trace 및 SRAM/DMEM guard도 비교한다. 내부 SRAM 내용을 TB에서 직접 초기화하지 않는다. Snapshot용 live CSR 변경은 TB 전용 주입/관찰로 제한하며 프로그램에 동시 CSR 쓰기 기능을 추가하지 않는다.
+
+작은 Debug에서 clk/reset, owner, argmax_en/address/rdata/error, 물리 RAM enable/address/rdata, index/lane/candidate/initialize/compare/greater/prediction, 내부 done, GPR writeback, PC, Top done, Timer를 파형으로 확인한다. Read R 직후 rdata 갱신 → R+1 소비, 워드 내 hold, 마지막 비교 결과 갱신 후 Writeback 순서를 대조한다. 대량 waveform은 OFF다.
+
+최종 Gate는 A-01~A-16·위 매트릭스 및 Phase 1~5/메모리 Fault 후속/Python unit/Legacy RTL 5종 회귀의 실제 PASS와 소스·로그·파형 근거로 **PASS** 판정했다. 첫 요소 뒤 TB 전용 index=15 주입으로 실행 중 오류→추가 처리 차단·Error Halt·Writeback 금지도 검증했다. Phase 7/8은 수행하지 않았다.
 
 ## 6. 최종 응용 시나리오
 
@@ -157,4 +231,4 @@ Block length=0+PC Bounds는 0x06이고, length misalignment+PC Bounds는 0x05다
 각 사례 전에 정상 LOAD/STORE로 SRAM/DMEM을 준비한다. armed에서 누적 Count=6, unarmed에서 0을 만든 후 Fault가 이를 바꾸지 않는지 비교한다.
 Python 예상 오류를 명시하고 RTL 실제 trace/final-memory dump와 재비교한다. Phase 1~5·Python unit·Legacy 5종 회귀도 필수다.
 
-최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. Phase 6은 승인 대기다.
+최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. 이 메모리 후속 작업 당시 Phase 6은 승인 대기였으며, 이후 별도 승인으로 완료한 Phase 6 결과는 [18번 보고서](18_phase6_report.md)를 따른다.

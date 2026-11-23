@@ -27,11 +27,23 @@ module npu_top #(
         .config_error(gemm_config_error),.active(gemm_active),.done(gemm_done),.fault(gemm_fault),
         .error_code(gemm_error_code),.ram_en(gemm_en),.ram_we(gemm_we),
         .ram_address(gemm_address),.ram_wdata(gemm_wdata),.ram_rdata(gemm_rdata));
+    logic argmax_start,argmax_active,argmax_done,argmax_fault,argmax_en;
+    wire [31:0] argmax_config [0:1];
+    wire [31:0] argmax_address,argmax_rdata;
+    wire [7:0] argmax_config_error,argmax_error_code,argmax_error;
+    wire [3:0] argmax_result;
+    argmax_engine u_argmax(.clk(clk),.rst_n(rst_n),.start(argmax_start),.config_words(argmax_config),
+        .config_error(argmax_config_error),.active(argmax_active),.done(argmax_done),.fault(argmax_fault),
+        .error_code(argmax_error_code),.result_index(argmax_result),.sram_en(argmax_en),
+        .sram_address(argmax_address),.sram_rdata(argmax_rdata),.sram_error(argmax_error));
     instruction_controller #(.IMEM_BYTES(IMEM_BYTES),.DMEM_BYTES(DMEM_BYTES)) u_instruction_controller (
         .clk(clk), .rst_n(rst_n), .start(start),
         .load_engine_active(1'b0), .gemm_engine_active(gemm_active),
         .gemm_start(gemm_start),.gemm_config(gemm_config),.gemm_done(gemm_done),
         .gemm_fault(gemm_fault),.gemm_config_error(gemm_config_error),.gemm_error_code(gemm_error_code),
+        .argmax_start(argmax_start),.argmax_config(argmax_config),.argmax_done(argmax_done),
+        .argmax_fault(argmax_fault),.argmax_config_error(argmax_config_error),
+        .argmax_error_code(argmax_error_code),.argmax_result(argmax_result),
         .busy(busy), .done(done), .fault(fault),
         .imem_en(imem_en), .imem_addr(imem_addr), .imem_rdata(imem_rdata),
         .dmem_en(dmem_en),.dmem_we(dmem_we),.dmem_addr(dmem_addr),
@@ -44,10 +56,10 @@ module npu_top #(
     // Only one instruction owns SRAM; GEMM retains ownership through its final write.
     npu_memory_wrapper u_memory(
         .clk(clk),.rst_n(rst_n),
-        .owner(gemm_active?npu_memory_pkg::OWNER_GEMM:(xfer_busy?npu_memory_pkg::OWNER_XFER:npu_memory_pkg::OWNER_NONE)),
+        .owner(gemm_active?npu_memory_pkg::OWNER_GEMM:(xfer_busy?npu_memory_pkg::OWNER_XFER:(argmax_active?npu_memory_pkg::OWNER_ARGMAX:npu_memory_pkg::OWNER_NONE))),
         .xfer_en(sram_en),.xfer_we(sram_we),.xfer_address(sram_address),
         .xfer_wdata(sram_wdata),.xfer_rdata(sram_rdata),.xfer_error(sram_error),
         .gemm_en(gemm_en),.gemm_we(gemm_we),.gemm_address(gemm_address),
         .gemm_wdata(gemm_wdata),.gemm_rdata(gemm_rdata),
-        .argmax_en(1'b0),.argmax_address(32'd0),.argmax_rdata(),.argmax_error());
+        .argmax_en(argmax_en),.argmax_address(argmax_address),.argmax_rdata(argmax_rdata),.argmax_error(argmax_error));
 endmodule

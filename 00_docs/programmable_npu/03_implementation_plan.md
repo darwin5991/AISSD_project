@@ -2,7 +2,7 @@
 
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
-**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 4를 6efeec4에 보존한 뒤 사용자 승인에 따라 Phase 5 GEMM 구현·검증을 완료했다. [Phase 5 결과](15_phase5_report.md)의 Gate PASS와 정식 지원 하한 K=8 확정을 기록한다. 사용자 승인 전 Phase 6 ARGMAX로 진행하지 않는다.
+**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 4를 6efeec4에 보존한 뒤 사용자 승인에 따라 Phase 5 GEMM 구현·검증을 완료했다. [Phase 5 결과](15_phase5_report.md)의 Gate PASS와 정식 지원 하한 K=8 확정을 기록한다. Phase 6도 후속 승인에 따라 독립 ARGMAX 구현·검증 Gate PASS다. [18번 결과](18_phase6_report.md)를 따르며 Phase 7/8은 별도 승인 전 진행하지 않는다.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -84,7 +84,7 @@
 
 ## Phase 5 — GEMM 1회 실행 엔진 통합
 
-**진행 승인 및 실행 상태 (2026-11-24): PASS.** 주 suite 173 cases / 37451392 RTL checks, K 경계 72 cases, 독립/연속 Legacy FC 출력 326words 일치. Snapshot/INT32 wrap/R→R+6/Timer/Fault 및 Phase 1~4·Python·Legacy 회귀 PASS. 최소 K=8은 사용자 승인으로 정식 지원 하한을 확정했다. [15_phase5_report.md](15_phase5_report.md). Phase 6은 미시작이다.
+**진행 승인 및 실행 상태 (2026-11-24): PASS.** 주 suite 173 cases / 37451392 RTL checks, K 경계 72 cases, 독립/연속 Legacy FC 출력 326words 일치. Snapshot/INT32 wrap/R→R+6/Timer/Fault 및 Phase 1~4·Python·Legacy 회귀 PASS. 최소 K=8은 사용자 승인으로 정식 지원 하한을 확정했다. [15_phase5_report.md](15_phase5_report.md). 이 Phase 5 시점의 Phase 6은 미시작이었으며 후속 결과는 18번 보고서를 따른다.
 
 **기존 RTL 중 핵심 변경 후보:**
 
@@ -105,11 +105,48 @@
 
 ## Phase 6 — ARGMAX 독립 실행, END/Halt 통합
 
-**변경 후보:** `argmax_control.sv`, `argmax_schedule.sv`; 기존 `argmax_unit.sv`, `signed_compare8.sv`, `argmax_tracker.sv` 재사용. `argmax_engine.sv` 신규 wrapper 권장.
+**후속 구현 승인 및 실행 상태 (2026-11-24): Phase 6 Gate PASS.** 기준 HEAD는 `414fd57`, 브랜치는 `feat/phase6-argmax-20261124`다. [17번 결정](17_phase6_decisions.md)의 확정 본문을 유지했고 독립 ARGMAX를 구현·검증했다. 최종 411회 실행, 2,983,083 RTL checks, 517,258 Python 비교 및 Phase 1~5/Memory Fault/Python 27개/Legacy 5종 회귀 PASS다. [18번 보고서](18_phase6_report.md). 커밋·Push 및 Phase 7/8은 수행하지 않았다.
 
-**테스트:** `ARG_LEN=1,3,4,9,10`, 음수 데이터, 최댓값 동점 시 lowest index, FC3의 마지막 두 padding byte 제외, A/B 선택, `rd=r0` 결과 무시, 다른 레이어 뒤에서도 독립 실행, `ARG_LEN=0,11` Fault.
+### 구현 구조와 적용 순서
 
-**완료 조건:** `EXEC ARGMAX,rd` Writeback, 정상 종료 `done`, Fault sticky 상태와 Reset 재시작 PASS.
+독립 `argmax_engine.sv`를 추가하고 기존 비교 Datapath를 재사용했다. 아래 순서대로 구현·검증을 완료했다.
+
+1. ISA package/Decoder에 기존 EXEC ARGMAX 형식을 연결한다. 예약 필드 → 원본 5bit rd 검사 순서를 유지한다. 새로운 Opcode/CSR/인코딩은 추가하지 않는다.
+2. CSR file에서 ARG_SRC/LEN 병렬 출력을 제공하고 Controller가 EXEC 수락 에지에 두 원본 32bit, next-PC/오류, rd를 Snapshot한다.
+3. 원본 L에서 넓은 W=ceil(L/4), B=4W, E=ARG_SRC+B를 계산한다. Alignment → A/B Region/역할 → 데이터/next-PC Bounds → Configuration 순서로 검증하며 **invalid ARG_LEN의 Bounds를 생략하지 않는다.**
+4. 검증 성공 후 Engine start를 1회만 허용한다. 기존 Wrapper ARGMAX 포트와 OWNER_ARGMAX를 연결한다. 검증 실패는 Engine start·모든 SRAM 요청·GPR Writeback·PC 전진을 차단한다.
+5. Read R → 소비 R+1, 워드별 직렬 byte 처리, 첫 값 initialize/후속 strict signed compare, 유효 L개만 비교를 구현한다. 다음 word는 i=4/8 경계에서만 읽는다.
+6. 마지막 비교 결과가 갱신된 뒤 내부 argmax_done을 발생시키고 다음 에지에 결과 zero-extend/rd Writeback 및 PC 전진을 수행한다. rd=r0도 전체 검증·실행 후 결과 쓰기만 생략한다. 내부 완료를 Top done/END와 분리한다.
+7. 연속 실행·Reset·Fault와 Timer 제외를 검증한다. ARGMAX active는 SRAM owner용이며 Timer에는 연결하지 않는다.
+8. Python Golden과 실제 RTL dump/포트·상태 scoreboard 및 작은 waveform을 비교한다. Phase 1~5, 메모리 Fault 후속, Python unit, Legacy RTL 5종 회귀를 수행한다. 결과·실패·소스 해시를 향후 보고서에 기록한다.
+
+구현된 Instruction FSM은 Snapshot → ARG_CHECK → ARG_START → ARG_WAIT → 명령 완료다. 현재 4bit/14개 상태에 CHECK/START/WAIT 3개를 추가하면 17개이므로 기존 값 유지 및 5bit로 확장했다. Engine은 IDLE/READ/PROCESS/COMPLETE/FAILED다. 실제 포트·FSM·타이밍은 18번 보고서와 소스를 따른다.
+
+### 신규·수정 파일
+
+| 구분 | 파일 | 적용 내용 |
+|---|---|---|
+| 신규 RTL | `04_rtl/controller/argmax_engine.sv` | 원본 설정 검사 출력, 가변 읽기/비교 FSM, 내부 완료·오류·결과 |
+| 수정 RTL | `04_rtl/isa/npu_isa_pkg.sv` | 기존 ISA에 해당하는 내부 OP_ARGMAX/상수 |
+| 수정 RTL | `04_rtl/isa/instruction_decoder.sv` | 기존 funct3/funct7/예약 필드 및 rd 유효성 |
+| 수정 RTL | `04_rtl/isa/csr_file.sv` | ARG_SRC/LEN 원본 32bit 병렬 내부 출력; 저장/권한 규칙 보존 |
+| 수정 RTL | `04_rtl/isa/instruction_controller.sv` | 원자적 Snapshot, 공통 오류 병합, start/Wait, 지연 GPR Writeback, FSM 폭 |
+| 수정 RTL | `04_rtl/controller/npu_top.sv` | Engine과 기존 ARGMAX Wrapper 포트·owner 연결; 외부 포트 유지 |
+| 신규 검증 | `05_tb/npu/tb_npu_phase6.sv` | 동기 메모리/상태·요청·결과·Timer·Fault scoreboard와 실제 dump |
+| 신규 검증 | `90_scripts/npu/phase6_vectors.py` | 독립 signed Golden, 인코딩/CSR/주소·Fault·혼합 프로그램 시나리오 |
+| 신규 검증 | `90_scripts/npu/run_phase6.py` | XSim 실행·timeout·실제 비교·hash·소규모 파형·로그 |
+| 검증 연결 보완 | `90_scripts/npu/run_phase1.py` | 새 Engine/기존 비교 Datapath compile 의존 목록 |
+| 검증 연결 보완 | `05_tb/npu/tb_npu_phase2_units.sv`, `tb_npu_phase2_active.sv` | wildcard 인스턴스의 추가 내부 포트 선언/연결; 기존 기대 동작 보존 |
+| 기존 검증 보완 | `90_scripts/npu/phase5_vectors.py` | argmax_reserved가 기존 EXEC ARGMAX,r0이므로 실제 불법 형식으로 교체하고 불법 인코딩 커버리지 유지; 공유 Golden 확장 시 기존 GEMM 수치/기대값 보존 |
+| 문서 | 01/02/03/04/README, `17_phase6_decisions.md`, `18_phase6_report.md` | 계약·계획·실제 수행 결과를 구분해 기록 |
+
+재사용/보존 대상: argmax_unit/tracker/update, byte_select4, signed_compare8, common register_en, Legacy argmax_control/schedule/control_read_mux/LUT/MLP Top, 기존 SRAM Wrapper/MUX/BRAM/Block/GEMM/MAC/Accumulator. Wrapper는 준비된 포트를 사용하므로 기본 계획에 RTL 변경을 포함하지 않는다. 합성/FPGA/10,000장 정확도는 이번 Phase 6의 수행 범위가 아니다.
+
+### 실행한 테스트와 완료 Gate
+
+[Verification Plan 5.1절](04_verification_plan.md)의 A-01~A-16 및 경계/복합 오류 매트릭스를 구현·실행해 PASS했다. 특히 LEN=11의 0x07/0x06 구분, LEN=0의 시작 Bounds, 상위 비트/올림 산술, 마지막 IMEM의 데이터/next-PC 오류 병합을 검증한다.
+
+완료 조건은 정상 결과/GPR zero-extend·r0 버림, Snapshot, 무부작용 Fault Halt/Reset, Timer 제외, R→R+1 실파형, 전체 회귀 PASS다. **Top done은 END에서만 1클럭**, argmax_done은 내부 완료다. 실제 근거는 18번 보고서/metrics/source snapshot/wave audit에 기록했다. Phase 7/8은 별도 승인 전 진행하지 않는다.
 
 ## Phase 7 — Python 생성·검증 하네스
 
@@ -175,4 +212,4 @@ Phase 5를 5be9059에 먼저 보존한 뒤 fix/memory-fault-priority-20261124에
 명령 4개 × Alignment/Region/Bounds/정상 주소의 마지막 IMEM Word 사례를 필수 검증하고, 선행 인코딩/GPR/CSR 및 Timer 보존도 확인한다.
 Phase 1~5, Python 및 Legacy RTL 5종 회귀가 완료되어야 한다. 보고서·수정은 Phase 5와 별도 커밋으로 관리한다. Phase 6은 승인 범위가 아니다.
 
-최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. Phase 6은 승인 대기다.
+최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. 이 메모리 후속 작업 당시 Phase 6은 승인 대기였으며, 이후 별도 승인으로 완료한 Phase 6 결과는 [18번 보고서](18_phase6_report.md)를 따른다.

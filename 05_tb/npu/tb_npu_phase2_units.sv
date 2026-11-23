@@ -14,6 +14,7 @@ module tb_npu_phase2_units;
     wire [31:0] read_data;
     wire [7:0] access_error;
     wire [31:0] gemm_settings [0:9];
+    wire [31:0] argmax_settings [0:1];
     csr_file u_csr(.*);
     integer checks=0, timer_edges=0;
     logic [31:0] expected_settings[0:11];

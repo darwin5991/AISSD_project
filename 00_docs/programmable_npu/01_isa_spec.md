@@ -174,6 +174,21 @@ Phase 5 실제 검증에서 K=8/12/16/32와 출력 그룹·연속 실행이 PASS
 - v1 프로파일에서 `ARG_LEN`은 1~10. 기존 4bit 인덱스 비교 Datapath를 재사용하며 가변 길이에 맞춰 스케줄러를 수정. 범위·정렬·Buffer 끝 검사. N을 초과한 마지막 워드의 padding은 비교하지 않음.
 - GEMM 자동 종료 뒤 ARGMAX를 자동으로 실행하지 않음; 반드시 별도 `EXEC ARGMAX, rd` 필요.
 
+### 6.1 Phase 6 확정 — Snapshot과 실행 전 검증
+
+[17번 P6-D-01/P6-D-02](17_phase6_decisions.md)는 사용자 최종 확정 계약이다. **후속 구현 승인에 따라 Phase 6 RTL/테스트를 구현·실행했고 Gate PASS다.** 실제 범위는 [18번 결과](18_phase6_report.md)를 따른다. 여기의 P6 결정은 07번 D-01/D-02와 구분한다.
+
+EXEC 수락 시 ARG_SRC와 ARG_LEN 원본 32bit를 같은 에지에 원자적으로 Snapshot하고, 이후 검증·실행은 Snapshot만 사용한다. RW CSR 저장 시 중간 invalid 값에 조기 Fault하지 않는 07번 D-01을 유지한다. Opcode/Encoding 및 GPR/CSR 선행 검사 뒤 데이터 오류와 선택된 next-PC 오류를 Alignment(0x05) → Region(0x04) → 데이터/next-PC Bounds(0x06) → Configuration(0x07)으로 병합한다. 정상 데이터라도 next-PC가 범위 밖이면 Engine start/Read/Writeback을 금지한다.
+
+`L=unsigned32(ARG_LEN)`, `W=ceil(L/4)`, `B=4W`, `E=ARG_SRC+B`(exclusive)를 원본에서 충분히 넓게 계산한다. 예를 들어 `W=(zext64(L)+3)>>2`, B와 E도 64bit로 계산한다. 32bit 덧셈 뒤 확장하거나 좁은 길이 필드를 먼저 검사해서는 안 된다. ARG_SRC만 4byte 정렬을 요구하며 ARG_LEN은 요소 수이므로 4의 배수일 필요가 없다.
+
+Alignment 검사 후 A/B 논리 창·source 역할을 검사한다. Weight/Bias 및 다른 Region은 INVALID_REGION이다. 유효한 A/B 창에서는 시작 주소가 실제 Buffer 내부이고 E가 그 Buffer 끝 이하여야 한다. LEN=0에서도 시작 주소 Bounds를 검사하며 W−1 산술 underflow를 피한다. **LEN이 0 또는 10 초과여도 Word 수와 전체 Bounds 검사를 수행한 뒤**, 원본 L의 1~10 Configuration 조건을 검사한다. 모든 검증 성공 이후에만 내부 길이/word address 폭으로 축소하여 실제 SRAM 접근을 허용한다.
+
+따라서 정상 next-PC에서 A/B base의 LEN=0/11은 0x07, 끝에서 8byte 남은 위치의 LEN=11은 0x06, Buffer 끝 주소의 LEN=0도 0x06이다. LEN=0xFFFFFFFF의 W=0x40000000/B=0x100000000을 절단하지 않으며 실제 Buffer Bounds로 0x06이다. 이들보다 Alignment/Region 오류가 있으면 각각 0x05/0x04가 우선한다. next-PC Bounds가 겹치면 주소·범위가 정상인 LEN=0/11도 0x06이다.
+
+사전 Fault는 PC/GPR/RW CSR을 보존하고 SRAM 요청과 결과 Writeback을 차단한다. rd=r0도 동일한 검증·실행을 수행하고 결과 쓰기만 생략한다. 내부 argmax_done은 다음 명령 진행용이며 Top done은 기존대로 END에서만 발생한다. ARGMAX 동안 Timer Count/armed/overflow는 변하지 않는다.
+
+
 ## 7. 메모리 인터페이스 계약 (선택 A)
 
 - IMEM, 외부 DMEM은 **서로 독립적인** 32bit Single-Port. 두 메모리의 요청선: `en`, `we`(IMEM 없음/0), `addr[31:0]`, `wdata[31:0]`; 응답선: `rdata[31:0]`.
@@ -209,7 +224,7 @@ Phase 5 실제 검증에서 K=8/12/16/32와 출력 그룹·연속 실행이 PASS
 - 주소/길이/구성 오류는 **명령 실행 시작 전 가능한 한 검증**하여 부분 부작용을 줄임. 검증되지 않은 런타임 Fault에서 이미 쓰인 메모리의 rollback은 보장하지 않음.
 - 동일 사이클 여러 오류 가능 시 우선순위: Opcode/Encoding → GPR/CSR → Alignment → Region → Bounds → Config. 첫 오류 코드만 sticky 기록.
 
-2026-11-24 별도 후속 승인: LW/SW, Block LOAD/STORE 및 GEMM은 데이터 오류와 선택된 next-PC Bounds를 명령 시작 전에 함께 판단한다. Alignment(0x05) → Region(0x04) → 데이터/next-PC Memory Bounds(0x06) → Configuration(0x07) 순서로 병합한다. 정상 데이터 주소라도 next-PC가 범위 밖이면 요청을 발행하지 않는다. Opcode/Encoding/GPR/CSR 선행 검사는 유지한다.
+2026-11-24 별도 후속 승인 및 [17번 P6-D-01](17_phase6_decisions.md): LW/SW, Block LOAD/STORE, GEMM 및 ARGMAX는 데이터 오류와 선택된 next-PC Bounds를 명령 시작 전에 함께 판단한다. Alignment(0x05) → Region(0x04) → 데이터/next-PC Memory Bounds(0x06) → Configuration(0x07) 순서로 병합한다. 정상 데이터 주소라도 next-PC가 범위 밖이면 요청을 발행하지 않는다. Opcode/Encoding/GPR/CSR 선행 검사는 유지한다.
 Block은 길이 GPR까지 수집한 뒤 전체 사전 검사를 통과한 경우에만 Engine start를 허용한다. 사전 Fault는 DMEM/SRAM 접근·GPR writeback·LOAD active를 발생시키지 않는다. Scalar의 확장 주소 산술 wrap 규칙은 12번 결정을 유지한다.
 
 - Reset 시 `STATUS=0`, `ERROR_CODE=0`, `fault=0`, `done=0`.

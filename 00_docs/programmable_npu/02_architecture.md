@@ -4,7 +4,7 @@
 
 **근거 RTL:** `04_rtl/controller/mlp_top.sv`, `control_unit.sv`, `pipeline_control.sv`, `read_issue_control.sv`, `address_generator.sv`, `layer_config_lut.sv`, `argmax_*`, `04_rtl/memory/memory_wrapper.sv`, `memory_port_mux.sv`, `buffer_router.sv`, `single_port_bram.sv`, `04_rtl/mac_array/*`, `04_rtl/accumulator_postprocess/*` (2026-11-24 GitHub 기본 브랜치 확인). **기존 문서:** `00_docs/architecture.md`, `00_docs/mac_input_pipeline.md`.
 
-현재 구현은 [Phase 5 보고서](15_phase5_report.md)의 Scalar/CSR/Timer, LW/SW, Block LOAD/STORE, 내부 SRAM 7개 및 CSR Snapshot 기반 단일 GEMM까지다. ARGMAX는 후속 승인 범위다. [10](10_phase3_decisions.md)·[12](12_phase4_decisions.md)·[14번 결정](14_phase5_decisions.md)을 적용한다. 최소 K=8은 실제 검증 후 사용자 승인으로 확정한 정식 지원 하한이다.
+현재 구현은 [Phase 5 보고서](15_phase5_report.md)의 Scalar/CSR/Timer, LW/SW, Block LOAD/STORE, 내부 SRAM 7개 및 CSR Snapshot 기반 단일 GEMM까지다. 독립 ARGMAX도 후속 승인에 따라 구현·검증 Gate PASS이며 [18번 결과](18_phase6_report.md)를 따른다. [10](10_phase3_decisions.md)·[12](12_phase4_decisions.md)·[14번 결정](14_phase5_decisions.md)을 적용한다. 최소 K=8은 실제 검증 후 사용자 승인으로 확정한 정식 지원 하한이다.
 
 ## 1. 최상위 구조
 
@@ -138,12 +138,41 @@ Wrapper의 기존 GEMM bank별 물리 포트를 사용하며, 주소는 축소 �
 
 **한 그룹 사이 읽기 공백 1클럭** 및 마지막 그룹의 Drain을 유지한다. 다음 `EXEC GEMM`은 이전 출력 쓰기 완료 후에만 시작. 과거 전체 3-layer의 고정 cycle count는 새 ISA 제어 오버헤드를 포함하지 않으므로 새 전체 프로그램의 예상 클럭으로 직접 사용하지 않는다.
 
-## 5. ARGMAX 독립 엔진
+## 5. ARGMAX 독립 엔진 — 확정 계약과 실제 구현
 
-- 기존 `argmax_unit.sv`(byte_select4, signed_compare8, argmax_tracker)를 가능한 한 재사용.
-- 기존 `argmax_control/argmax_schedule`은 `state=ARGMAX`와 `class_index<=9`로 고정돼 있음. 이를 `argmax_start`, `ARG_SRC`, `ARG_LEN(1..10)`, `argmax_done` 기반으로 바꿔 독립 Engine으로 구성.
-- Read 1clk latency 반영, `ARG_SRC` base word offset을 포함한 인덱싱. 동점은 lowest index. 마지막 임의 padding byte 무시. 결과는 32bit GPR rd에 zero-extend Writeback.
-- 기존 `control_read_mux`는 GEMM/ARGMAX 전용 입력 포트 선택을 담당했지만 이제 SRAM ownership MUX와 역할이 중복될 수 있음. 통합/삭제는 회귀 테스트 통과 조건으로만 수행.
+**현재 상태:** [17번 결정](17_phase6_decisions.md)의 P6-D-01/P6-D-02는 확정했고 문서에 반영했다. 후속 사용자 승인에 따라 ARGMAX Decoder/Snapshot/Engine/Top 연결 및 전체 검증을 완료했다. **Phase 6 Gate PASS**, [18번 보고서](18_phase6_report.md)에 실제 인터페이스·사이클·회귀·파형을 기록했다. Phase 7/8은 미시작이다.
+
+### 5.1 구현 구조와 Snapshot 책임
+
+- 독립 `argmax_engine.sv`를 추가하고 기존 `argmax_unit`(byte_select4/signed_compare8/argmax_tracker/argmax_update)을 재사용했다. Legacy argmax_control/schedule, control_read_mux, LUT/MLP Controller는 보존했다.
+- CSR file은 기존 ARG_SRC/LEN 원본 32bit 저장을 유지하고 두 값의 병렬 내부 출력을 제공하도록 확장했다. **Snapshot 레지스터는 Instruction Controller에 둔다.**
+- EXEC 수락 에지에 두 CSR과 완료용 next-PC/rd를 원자적으로 래치한다. Snapshot과 검증이 실제 Engine start보다 먼저다. 이후 live CSR을 다시 읽어 실행 설정으로 사용하지 않는다.
+- 구현 흐름: EXEC Snapshot → ARG_CHECK → 유효 시 ARG_START → ARG_WAIT → 결과 GPR Writeback/PC 전진. CHECK 실패 시 실제 Engine을 시작하지 않고 Fault Halt한다.
+- Engine 내부는 IDLE → READ → PROCESS → 필요 시 다음 READ → COMPLETE → IDLE의 직렬 구조로 구현했고 실행 중 오류에는 FAILED로 진입한다. 마지막 비교에서 tracker가 갱신된 뒤 완료를 통보하고, 안정된 결과를 Controller가 다음 에지에 Writeback한다. 마지막 비교와 같은 에지의 오래된 prediction을 GPR에 쓰지 않도록 한다.
+
+### 5.2 P6-D-01/P6-D-02 사전 검사
+
+`L=unsigned32(ARG_LEN)`, `W=(zext64(L)+3)>>2`, `B=W*4`, `E=zext64(ARG_SRC)+B`(exclusive)를 축소 없이 계산한다. W/B/E는 충분히 넓게, 실제 64bit 산술로 계산한다. LEN=0에서도 W−1 underflow를 피한다.
+
+Opcode/Encoding/GPR/CSR 선행 검사를 유지한 뒤, ARG_SRC Alignment(0x05) → A/B Region/역할(0x04) → 실제 Buffer 시작/끝 및 next-PC Bounds(0x06) → 원본 L의 1~10 Configuration(0x07) 순서를 적용한다. ARG_SRC는 실제 Buffer 끝보다 작고 E는 그 끝 이하여야 한다. **LEN이 잘못돼도 전체 Bounds를 계산·검사한다.** 기존 Controller의 공통 오류 병합 방식을 ARGMAX에도 적용했다.
+
+예: A/B base의 LEN=11은 0x07, 끝에서 8byte 남은 위치의 LEN=11은 0x06, LEN=0xFFFFFFFF는 W=0x40000000/B=0x100000000으로 실제 Buffer Bounds 0x06이다. next-PC Bounds가 겹치면 주소/범위가 정상인 LEN=0/11도 0x06이다. 실제 요청과 좁은 길이/물리 주소 사용은 모든 검증을 통과한 뒤에만 허용한다.
+
+### 5.3 기존 SRAM 포트와 읽기 일정
+
+- 기존 npu_memory_wrapper의 OWNER_ARGMAX, argmax_en/address/rdata/error를 재사용한다. 현재 Top의 비활성 연결을 실제 Engine에 연결했으며 외부 Top 포트는 추가하지 않는다.
+- Wrapper의 공통 decoder는 모든 SRAM bank를 해석한다. **A/B source 역할·전체 길이·next-PC 검사는 Wrapper의 요청 시 error만으로 대체할 수 없다.** 실행 전 검증이 Weight/Bias 및 잘못된 범위의 접근을 차단해야 한다.
+- 요소 i의 Read 주소는 ARG_SRC+4×floor(i/4), byte lane은 i[1:0]이다. ARG_SRC가 정렬됐으므로 시작 lane은 0이다. 요청 시 전체 주소 검사를 거친 뒤 bank별 물리 word 폭으로 전달한다.
+- ARG_LEN은 요소 수이며 길이 정렬 검사를 하지 않는다. 기존 sram_range_error에 원본 ARG_LEN을 그대로 넣으면 정상 1/3/9/10이 잘못 거부되므로 ARGMAX의 W/B/E 계약에 맞는 사전 검사를 사용한다. 공통 Block 규칙은 변경하지 않는다.
+- SRAM 요청 R → R 직후 RAM registered rdata 및 응답 bank selector 갱신 → R+1 첫 바이트 소비. 같은 Word의 나머지 바이트 처리 동안 Read enable을 내리고 기존 rdata hold를 사용한다. 추가 SRAM Output Register는 없다.
+- 최대 3word를 읽되 요소 0..L−1만 비교한다. 첫 요소로 무조건 초기화하고 이후 signed strict greater에서만 갱신한다. padding은 읽은 word에 포함돼도 비교하지 않는다.
+- ARGMAX 실행 동안 owner를 유지하고, GEMM/Block/ARGMAX가 동시에 SRAM을 소유하지 않도록 Controller 순차 실행 및 assertion으로 확인했다. SRAM 7개 깊이/폭/1clk Read 및 MAC R→R+6를 변경하지 않는다.
+
+### 5.4 완료·Fault·Timer
+
+결과는 4bit index를 32bit zero-extend하여 rd에 기록한다. rd=r0도 검증·Read·비교를 수행하며 결과 쓰기만 생략한다. Fault에서는 GPR/PC Writeback을 차단하고 기존 STATUS/ERROR_CODE sticky Halt/Reset 복구를 유지한다. 연속 실행은 index/read phase 초기화와 첫 값 initialize로 이전 결과 잔류를 제거한다.
+
+`argmax_done`은 내부 명령 완료이며 NPU Top `done`은 기존 END에서만 1클럭 발생한다. GEMM→ARGMAX 자동 전이는 없다. ARGMAX owner용 active는 Timer에 연결하지 않으며 Count/armed/overflow를 보존한다.
 
 ## 6. Instruction / Scalar / CSR / Timer
 
@@ -152,13 +181,13 @@ Wrapper의 기존 GEMM bank별 물리 포트를 사용하며, 주소는 축소 �
 | `instruction_controller` | PC, instruction register, FSM, halt | 외부 IMEM Fetch→Decode→Execute→WB; Branch/Jump 처리, 순차 완료 대기 |
 | `register_file` | r0..r7 | 32bit 읽기/쓰기, r0=0, invalid GPR Fault |
 | `scalar_alu` | 조합 | ADD, ADDI, equality comparison, 주소 계산, JAL link |
-| `csr_file` | 설정·Status/Code | `SETI/CSRW/CSRR`, Snapshot, Read-only CSR 보호 |
+| `csr_file` | 설정·Status/Code | `SETI/CSRW/CSRR`, 원본 설정 병렬 출력·Read-only 보호; Snapshot 레지스터는 Instruction Controller |
 | `perf_timer` | count, armed, overflow | TSTART/TSTOP, LOAD/GEMM `engine_active`만 Count |
 | `block_transfer` | src, dst, remaining, phase | 32bit word 복사, 양쪽 메모리 R/W, bounds/complete |
 | `gemm_controller` | counters, FSM, pipeline tags | 1 GEMM 실행, MAC Read/Write 스케줄, done |
 | `argmax_engine` | index, read/compare phase | 가변 1~10 signed INT8 비교, 결과 |
 
-Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. Phase 5에서 GEMM 원자적 Snapshot과 실행 전 설정 검증을 추가했다. ARGMAX Snapshot/검증은 후속 범위다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 센다. Phase 3의 npu_top은 실제 Block Transfer LOAD active를 연결하며 GEMM active는 Phase 5의 실제 Engine 실행 PREP~최종 Write에 연결한다. 별도 TB의 기존 테스트용 activity 입력은 유지한다. 신규 npu_memory_wrapper는 기존 single_port_bram 7개를 같은 깊이와 1clk read로 재사용하고 XFER/GEMM/ARGMAX 포트를 분리한다. 새 output data register는 없으며 GEMM은 Phase 5에서 연결했으며 ARGMAX 엔진은 현재 비활성이다. 외부 DMEM은 byte address의 32bit Single-Port 고정 동기 read이고, read R 수락 → R+1 capture → R+2 write로 직렬 전송한다.
+Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. Phase 5에서 GEMM 원자적 Snapshot과 실행 전 설정 검증을 추가했다. ARGMAX Snapshot/검증도 17번 확정과 후속 구현 승인에 따라 Phase 6에서 구현·검증했다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 센다. Phase 3의 npu_top은 실제 Block Transfer LOAD active를 연결하며 GEMM active는 Phase 5의 실제 Engine 실행 PREP~최종 Write에 연결한다. 별도 TB의 기존 테스트용 activity 입력은 유지한다. 신규 npu_memory_wrapper는 기존 single_port_bram 7개를 같은 깊이와 1clk read로 재사용하고 XFER/GEMM/ARGMAX 포트를 분리한다. 새 output data register는 없으며 GEMM은 Phase 5에서 연결했으며 ARGMAX 엔진도 Phase 6에서 기존 ARGMAX 포트에 연결했다. 외부 DMEM은 byte address의 32bit Single-Port 고정 동기 read이고, read R 수락 → R+1 capture → R+2 write로 직렬 전송한다.
 
 Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산하여 정렬 → 산술 wrap → Region → 용량 Bounds를 검사한다. MEM_REQ에서 Scalar 요청, XFER_WAIT에서 기존 Block Transfer 요청을 조합 선택한다. 응답 저장소나 외부 포트/프로토콜을 추가하지 않는다. LW는 read 수락 R 다음 R+1에 GPR writeback/PC 전진하며, SW는 write R 후 R+1에 완료한다. 대기 중 다음 Fetch/GPR/CSR 갱신은 차단한다. 기존 7개 SRAM/Wrapper 및 Block Transfer RTL은 보존했다.
 
@@ -167,7 +196,7 @@ Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산
 `IDLE → FETCH_REQ → FETCH_WAIT/DECODE → (SCALAR_EXEC / CSR_EXEC / XFER_WAIT / GEMM_WAIT / ARGMAX_WAIT / SYSTEM_EXEC) → COMMIT_PC → FETCH_REQ`, 별도 `HALTED`/`FAULT_HALT`.
 
 - Read Request를 수락한 에지와 명령어 register에 안전하게 capture하는 에지를 분리.
-- NPU 장기 명령에는 `start` 1회만 내보내고, 해당 엔진의 `done`이 최종 메모리 Write 완료 후 1회만 올라와야 함.
+- NPU 장기 명령에는 검증 성공 뒤 `start`를 1회만 내보낸다. 쓰기 엔진의 내부 `done`은 최종 Write 이후, 읽기 전용 ARGMAX의 `argmax_done`은 최종 비교 결과가 안정된 뒤 1회만 발생한다. Top `done`은 END 전용이다.
 - scalar `LW`는 외부 DMEM read 응답 뒤 `rd` Writeback; `SW`는 write 수락 에지 이후 완료 처리.
 - 대기 상태에 있는 동안 중복 start, PC 전진, GPR/CSR writeback 금지.
 
@@ -183,7 +212,7 @@ Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산
 | `controller/address_generator.sv` | 수정 | CSR base/length/offset 사용 |
 | `controller/read_issue_control.sv` | 수정 | layer fixed 조건 제거, 동적 K/N bounds |
 | `controller/pipeline_control.sv`, `pipeline_event_control.sv` | 최소 수정 | 3-stage MAC timing 유지 |
-| `controller/argmax_control.sv`, `argmax_schedule.sv` | 수정 | ARG_SRC/LEN에 따른 독립 엔진 |
+| `controller/argmax_control.sv`, `argmax_schedule.sv` | Legacy 경로 보존, 신규 `argmax_engine.sv` 추가 완료 | 고정 10개 스케줄과 가변 ARG_SRC/LEN 실행 분리 |
 | `controller/argmax_unit.sv`, `argmax_tracker.sv` 등 비교 Datapath | 유지 | signed compare와 lowest-index tie 재사용 |
 | `memory/memory_wrapper.sv` | 리팩터링/전용 wrapper 추가 | exec 중 block transfer write/read 및 주소 디코딩 필요 |
 | `memory/memory_port_mux.sv` | 교체 또는 신규 `sram_port_mux.sv` | 기존 `busy` 2-way MUX는 부적합 |
@@ -211,4 +240,4 @@ Block은 EXECUTE에서 src/dst/next-PC 검사를 래치하고 XFER_ARGS에서 rs
 실패하면 Engine을 시작하지 않고 XFER_REJECT를 거쳐 Error Halt한다. 정상 Block의 첫 요청/Read/Write/완료/Timer 일정은 유지하며, next-PC 오류인 Block의 Halt 판정은 길이 수집 뒤 Fetch 기준 age=4다.
 사전 오류에서도 Timer는 기존 Count/armed/overflow를 유지한다. 공유 SRAM Wrapper/BRAM/Block Engine/Datapath 및 외부 포트 변경은 없다.
 
-최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. Phase 6은 승인 대기다.
+최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. 이 메모리 후속 작업 당시 Phase 6은 승인 대기였으며, 이후 별도 승인으로 완료한 Phase 6 결과는 [18번 보고서](18_phase6_report.md)를 따른다.
