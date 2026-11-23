@@ -1,0 +1,83 @@
+// Decode only the Phase 1 instruction subset. Encoding errors precede GPR errors.
+module instruction_decoder (
+    input logic [31:0] instruction,
+    output npu_isa_pkg::scalar_op_t operation,
+    output logic [4:0] rd, rs1, rs2,
+    output logic [31:0] immediate,
+    output logic writes_rd,
+    output logic [7:0] error_code
+);
+    import npu_isa_pkg::*;
+    logic uses_rd, uses_rs1, uses_rs2;
+    always_comb begin
+        operation = OP_INVALID;
+        rd = instruction[11:7];
+        rs1 = instruction[19:15];
+        rs2 = instruction[24:20];
+        immediate = 32'd0;
+        writes_rd = 1'b0;
+        uses_rd = 1'b0;
+        uses_rs1 = 1'b0;
+        uses_rs2 = 1'b0;
+        error_code = ERR_OK;
+        case (instruction[6:0])
+            OPC_LUI: begin
+                operation = OP_LUI;
+                immediate = {instruction[31:12], 12'd0};
+                uses_rd = 1'b1;
+                writes_rd = 1'b1;
+            end
+            OPC_ADDI: begin
+                if (instruction[14:12] != 3'b000)
+                    error_code = ERR_ILLEGAL_ENCODING;
+                operation = OP_ADDI;
+                immediate = {{20{instruction[31]}}, instruction[31:20]};
+                uses_rd = 1'b1;
+                uses_rs1 = 1'b1;
+                writes_rd = 1'b1;
+            end
+            OPC_ADD: begin
+                if ((instruction[14:12] != 3'b000) ||
+                    (instruction[31:25] != 7'd0))
+                    error_code = ERR_ILLEGAL_ENCODING;
+                operation = OP_ADD;
+                uses_rd = 1'b1;
+                uses_rs1 = 1'b1;
+                uses_rs2 = 1'b1;
+                writes_rd = 1'b1;
+            end
+            OPC_BRANCH: begin
+                case (instruction[14:12])
+                    3'b000: operation = OP_BEQ;
+                    3'b001: operation = OP_BNE;
+                    default: error_code = ERR_ILLEGAL_ENCODING;
+                endcase
+                immediate = {{19{instruction[31]}}, instruction[31],
+                    instruction[7], instruction[30:25], instruction[11:8], 1'b0};
+                uses_rs1 = 1'b1;
+                uses_rs2 = 1'b1;
+            end
+            OPC_JAL: begin
+                operation = OP_JAL;
+                immediate = {{11{instruction[31]}}, instruction[31],
+                    instruction[19:12], instruction[20], instruction[30:21], 1'b0};
+                uses_rd = 1'b1;
+                writes_rd = 1'b1;
+            end
+            OPC_NPU: begin
+                // All unused END fields must be zero; other NPU ops are later phases.
+                if (instruction == INSN_END)
+                    operation = OP_END;
+                else
+                    error_code = ERR_ILLEGAL_ENCODING;
+            end
+            default: error_code = ERR_INVALID_OPCODE;
+        endcase
+        // U/J/immediate bit positions are not register references.
+        if (error_code == ERR_OK &&
+            ((uses_rd && (rd >= 5'd8)) ||
+             (uses_rs1 && (rs1 >= 5'd8)) ||
+             (uses_rs2 && (rs2 >= 5'd8))))
+            error_code = ERR_INVALID_GPR;
+    end
+endmodule

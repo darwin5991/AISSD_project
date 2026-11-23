@@ -1,5 +1,7 @@
 # Programmable NPU ISA v1.0 — 최종 기능 명세
 
+> 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
+
 **상태:** 구현 기준 명세 (RTL/Assembler 구현 및 시뮬레이션은 별도). **대상:** 기존 INT8 MLP 가속기의 명령어 구동 확장. **명령어 길이:** 항상 32bit. **Endian:** 메모리의 32bit 워드는 little-endian 바이트 순서 (`byte0` = `[7:0]`). **PC:** 32bit byte address, Reset 후 `0x0000_0000`.
 
 ## 1. 프로그래밍 모델
@@ -7,7 +9,7 @@
 - **GPR:** 8개(`r0..r7`) × 32bit. `r0` 읽기=0, 쓰기 무시. 명령어에는 5bit 레지스터 번호를 인코딩하되 `r8..r31`은 현재 **지원하지 않으며 참조 시 fault**. 나중에 GPR 수를 늘려도 인코딩 변경 없음.
 - **CSR:** 12bit 번호, 모든 데이터 32bit, 프로그램 종료/Reset까지 값 유지. 프로그램이 변경할 때만 갱신됨. 초기화 시 모든 R/W 설정 CSR은 0.
 - **실행:** 명령어별 blocking, in-order, 파이프라인/동시 명령어 실행 없음. `LOAD`, `STORE`, `EXEC`는 완료를 확인한 뒤에만 다음 명령어 Fetch.
-- **PC:** 정상 명령어는 `PC+4`; `BEQ/BNE/JAL`은 RISC-V 방식 PC-relative offset. 모든 목표는 4byte 정렬 및 IMEM 범위 안에 있어야 함.
+- **PC:** 정상 명령어는 `PC+4`; `BEQ/BNE/JAL`은 RISC-V 방식 PC-relative offset. 실제로 선택된 next PC만 4byte 정렬 및 IMEM 할당 용량 범위를 검사한다. BEQ/BNE가 non-taken이면 후보 target은 검사하지 않고 PC+4만 검사한다. JAL은 target 검증 성공 후에만 link/PC를 갱신한다 (D-04).
 - **Reset/시작:** `rst_n=0`에서 GPR/CSR/PC/컨트롤 상태 초기화(내부 SRAM 내용은 초기화하지 않음). 외부 `start` 한 펄스를 IDLE에서 수락하면 `PC=0`으로 FETCH 시작. `END` 또는 Fault 이후에는 Halt 유지; 재실행은 Reset 후 `start`로 진행.
 - **주소:** 모든 주소와 길이는 byte 단위. `LW/SW/LOAD/STORE`는 4byte 정렬. 블록 길이는 양수이고 4의 배수. 외부 주소 산술에서 32bit wrap을 금지함.
 
@@ -20,7 +22,7 @@
 | 내부 SRAM | `0x8000_0000` | 7개 물리 BRAM 접근용 논리 주소 |
 | MMIO 예약 | `0xF000_0000` | v1.0에서 접근 불가, 향후 확장 |
 
-**검증 환경 권장 프로파일:** IMEM 64 KiB, DMEM 16 MiB(각각 Testbench 파라미터). DMEM의 예시 유효 범위는 `[0x1000_0000,0x1100_0000)`. 이는 **시뮬레이션 메모리 크기**이지 FPGA의 실제 온칩 BRAM 용량을 뜻하지 않는다. 정확한 상한은 생성된 Testbench 프로파일의 파라미터를 따른다. 모든 프로그램/데이터는 범위 검사를 수행한다.
+**검증 환경 권장 프로파일:** IMEM 64 KiB, DMEM 16 MiB(각각 Testbench 파라미터). DMEM의 예시 유효 범위는 `[0x1000_0000,0x1100_0000)`. 이는 **시뮬레이션 메모리 크기**이지 FPGA의 실제 온칩 BRAM 용량을 뜻하지 않는다. Top과 TB는 동일한 elaboration 파라미터 IMEM_BYTES/DMEM_BYTES를 공유한다. Fetch 경계는 적재 코드 길이가 아닌 IMEM 할당 용량이다. 기본 마지막 유효 word 시작 주소는 0x0000FFFC이며 0x00010000은 요청 전에 MEMORY_BOUNDS Fault다. TB는 미사용 IMEM 전체를 0으로 채운다. 미적재 영역의 0x00000000을 실제로 fetch하면 INVALID_OPCODE(0x01) Fault다. 실제 FPGA의 미사용 메모리 초기값은 이 TB zero fill로 보장되지 않는다 (D-03). 모든 프로그램/데이터는 범위 검사를 수행한다.
 
 ### 내부 SRAM 창 (각 128 KiB 간격, 실제 깊이는 별도)
 
@@ -55,7 +57,7 @@ RISC-V 형식은 표준 필드 배치만 **선택적으로 차용**한다. 이�
 | `CSRW csr, rs1` | `0x73` | `001` | `CSRRW r0,csr,rs1` | 지정한 R/W CSR 전체 갱신 |
 | `CSRR rd, csr` | `0x73` | `010` | `CSRRS rd,csr,r0` | CSR 읽기(쓰기 없음) |
 
-R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 동일. `ADDI`, `LW`, `SW`의 signed imm12 범위 `[-2048,2047]`. Branch offset은 signed 13bit **2의 배수**이며 이 구현의 타깃은 4byte 정렬; `JAL` offset도 4byte 정렬. 지원하지 않는 funct/CSR 변종/잘못된 예약 비트는 Illegal Encoding Fault.
+R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 동일. `ADDI`, `LW`, `SW`의 signed imm12 범위 `[-2048,2047]`. Branch offset은 signed 13bit **2의 배수**, JAL offset은 signed 21bit **2의 배수**로 인코딩한다. 실제로 선택된 target이 4byte 정렬이 아니면 MISALIGNED Fault이며 non-taken branch의 후보 target은 검사하지 않는다. 지원하지 않는 funct/CSR 변종/잘못된 예약 비트는 Illegal Encoding Fault.
 
 **Scalar LW/SW는 외부 DMEM에만 접근**한다. 내부 SRAM의 덩어리 전송은 다음 `LOAD/STORE` 사용. `CSRW/CSRR`은 표준 Zicsr 형식의 위 두 형태만 지원하고 기타 CSR 명령의 지원을 보장하지 않는다.
 
@@ -66,7 +68,7 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 ```
 
 - 형식: `SETI csr, signed_immediate`, immediate 범위 `[-4096,4095]`; `CSR[csr] ← sign_extend_32(imm13)`.
-- Read-Only CSR 대상은 Fault. 나머지 설정 범위는 **실행에 사용할 때** 검증하며, 필요 시 쓰기 단계에서 조기 검증 가능(최종 동작 동일).
+- 없는 CSR/Read-Only CSR 쓰기/불법 형식은 해당 명령에서 즉시 Fault. 존재하는 RW 설정 CSR은 SETI/CSRW의 32bit 원본 값을 그대로 저장하고, 값 범위·조합·SRAM 주소/크기는 해당 EXEC 수락 시 snapshot 전체로 검증한다. 중간 설정값에 대한 조기 Fault는 금지한다 (D-01).
 
 ### 3.3 NPU 전용 공통 포맷 (Custom-1)
 
@@ -122,7 +124,7 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 | `0x7C3` | `BIAS_BASE` | RW | GEMM Bias 내부 SRAM byte address |
 | `0x7C4` | `M` | RW | v1 프로파일은 `M=1`만 지원 |
 | `0x7C5` | `N` | RW | 유효 출력 요소 수, 1~512 |
-| `0x7C6` | `K` | RW | 입력 요소 수, 양수, 4의 배수 |
+| `0x7C6` | `K` | RW | 입력 요소 수, 양수, 4의 배수; 초기 버전 K=4 미지원, 정확한 지원 하한은 Phase 5에서 확정 |
 | `0x7C7` | `BIAS_SHIFT` | RW | signed -32~31, 실제 엔진 포트 6bit |
 | `0x7C8` | `OUT_SHIFT` | RW | unsigned 0~31, 실제 엔진 포트 5bit |
 | `0x7C9` | `ACT_MODE` | RW | 0=none, 1=ReLU |
@@ -138,6 +140,7 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 ## 5. GEMM의 유효 구성/레이아웃
 
 - `EXEC GEMM` 한 번은 **하나의 FC 레이어(M=1)** 실행. 기존 MAC 4x4, INT8×INT8→signed32, 4-lane 누산·Bias·ReLU/Shift/Saturate 경로를 그대로 사용.
+- D-02: 초기 버전은 짧은 K용 bias staging을 추가하지 않는다. K=4는 EXEC 수락 시 INVALID_CONFIG Fault이며 GEMM start/SRAM write를 금지한다. 정확한 최소 지원 K는 Phase 5의 K=8/12/16/32 경계 분석·directed simulation 후 확정한다. 현재 기존 동작의 안전성이 알려진 K=128/512/784도 새 ISA 통합 PASS를 뜻하지 않는다.
 - `K_words = K/4`, `output_groups = ceil(N/4)`; 출력 저장 워드 개수는 `output_groups`. 마지막 그룹의 N을 초과하는 lane은 0으로 패딩된 데이터로 취급하며 모델 packer가 해당 Weight/Bias를 0으로 채움. N 개 유효 출력 외의 lane은 정확도/ARGMAX 평가 대상이 아님.
 - `SRC0_BASE`: Buffer A 또는 B, `DST_BASE`: **반대쪽 Buffer**. 입력·출력은 동일 단일 포트 Buffer에 동시에 배치할 수 없음.
 - `SRC1_BASE`: **Weight Bank 0의 논리 창 주소**. 물리 Weight Bank 0..3은 그 **동일 word offset**을 병렬 Read. Weight는 `출력 그룹 → K_words` 순서, 각 은행에 4개의 output lane별 INT8 × input 4개를 한 워드에 배치.
@@ -165,7 +168,7 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 - IMEM, 외부 DMEM은 **서로 독립적인** 32bit Single-Port. 두 메모리의 요청선: `en`, `we`(IMEM 없음/0), `addr[31:0]`, `wdata[31:0]`; 응답선: `rdata[31:0]`.
 - **동기 Read:** 상승 에지 R에 `en=1,we=0,addr` 수락 → R 직후 `rdata` 갱신 → NPU는 **R+1 상승 에지** 이후 단계에서 소비. 별도 Ready/Valid 없음. `en=0` 또는 write 시 read data hold.
 - **Write:** 상승 에지에 `en=1,we=1`이면 해당 32bit 워드 즉시 기록. 부분 Byte Enable 없음. Read Data 출력은 Write 동안 Hold(`NO_CHANGE` 동작). 명령어 제어는 write가 실제 반영된 뒤 완료 선언.
-- IMEM Read Only, PC/word 정렬 위반·프로그램 크기 초과 Fault. DMEM `LW/SW`와 Block Transfer가 공유하는 한 포트를 상위 MUX로 선택.
+- IMEM Read Only, PC/word 정렬 위반·IMEM 할당 용량 초과 Fault (적재 코드 길이는 검사하지 않음). DMEM `LW/SW`와 Block Transfer가 공유하는 한 포트를 상위 MUX로 선택.
 - v1에서는 요청 Stall/Backpressure/가변 지연 없음. AXI/DDR 연결 시 별도 Adapter가 이 고정 지연 인터페이스를 충족하도록 버퍼링하거나, 후속 ISA 마이크로아키텍처 버전에서 handshake를 추가해야 함.
 
 ## 8. Performance Timer (선택 B)

@@ -1,6 +1,6 @@
 # Programmable NPU v1.0 — 문서 색인
 
-> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **명세 확정 / 새 ISA RTL 미구현**
+> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1 Scalar/Fetch 구현·검증 PASS / Phase 2 이후 미구현**
 >
 > 기존 `00_docs/architecture.md`는 **고정 3-Layer MLP 베이스라인**을 설명한다. 이 디렉터리는 그 RTL을 **명령어 구동 NPU**로 확장하기 위한 새로운 구현 계약이다. 기존 성능/정확도 수치를 새 설계의 검증 결과로 인용하지 않는다.
 
@@ -11,6 +11,9 @@
 3. [`03_implementation_plan.md`](03_implementation_plan.md): Codex 작업 단계, 기존 파일별 변경 계획, 완료 기준
 4. [`04_verification_plan.md`](04_verification_plan.md): 유닛→통합→MNIST 정확도→합성/Timing 검증 계획
 5. [`../../AGENTS.md`](../../AGENTS.md): Codex용 저장소 작업 규칙(배포 시 저장소 루트에 배치)
+6. [06_phase0_report.md](06_phase0_report.md): 기존 RTL 기준선 진단
+7. [07_design_decisions_phase0.md](07_design_decisions_phase0.md): D-01~D-04 확정 사항 (우선 적용)
+8. [08_phase1_report.md](08_phase1_report.md): Phase 1 구현·실행 검증 및 후속 범위
 
 ## 이번에 최종 확정한 선택
 
@@ -25,4 +28,4 @@
 - **v1.0 구현 프로파일로 고정한 세부 규칙**: 아래 명세에 명시된 인코딩·오류 코드·메모리 상태·상위 start/done 핸드셰이크·지원 범위. 대화에서 다루지 않은 극단적인 경우를 임의 구현으로 결정하지 않도록 문서에 명시함.
 - **이번 범위 밖**: RV32I 완전 호환, 명령어 파이프라인, AXI/DDR, 멀티코어, Conv/Attention, 물리 GPR 증설, 연산/전송 중첩, 다중 Timer.
 
-명세 간 충돌 시 01의 ISA 기능 계약 → 02의 사이클/인터페이스 계약 → 03의 구현 절차 → 04의 테스트 순서로 판단한다. 기존 베이스라인은 레거시 RTL 해석의 근거이며 새 ISA 명세보다 우선하지 않는다.
+명세 간 충돌 시 [07 설계 결정](07_design_decisions_phase0.md)의 D-01~D-04 및 후속 사용자 확정 → 01의 ISA 기능 계약 → 02의 사이클/인터페이스 계약 → 03의 구현 절차 → 04의 테스트 순서로 판단한다. 기존 베이스라인은 레거시 RTL 해석의 근거이며 새 ISA 명세보다 우선하지 않는다.

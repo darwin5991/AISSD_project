@@ -1,6 +1,10 @@
 # Programmable NPU v1.0 — RTL 아키텍처 및 인터페이스 명세
 
+> 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
+
 **근거 RTL:** `04_rtl/controller/mlp_top.sv`, `control_unit.sv`, `pipeline_control.sv`, `read_issue_control.sv`, `address_generator.sv`, `layer_config_lut.sv`, `argmax_*`, `04_rtl/memory/memory_wrapper.sv`, `memory_port_mux.sv`, `buffer_router.sv`, `single_port_bram.sv`, `04_rtl/mac_array/*`, `04_rtl/accumulator_postprocess/*` (2026-11-24 GitHub 기본 브랜치 확인). **기존 문서:** `00_docs/architecture.md`, `00_docs/mac_input_pipeline.md`.
+
+현재 구현은 [Phase 1 보고서](08_phase1_report.md)의 Scalar/Fetch skeleton까지다. 아래 전체 엔진/SRAM/CSR 구조는 후속 Phase의 설계 목표이며, 현재 구현 완료를 의미하지 않는다.
 
 ## 1. 최상위 구조
 
@@ -65,6 +69,7 @@ Write:
 - Request/Response 별도 ready/valid 없음, 대기 시간 가변 아님. **Read 결과를 요청 edge와 동일 edge에서 DUT가 샘플링하지 않도록 함.**
 - IMEM와 DMEM은 각각 물리적으로 단일 포트. `LW/SW`와 블록 전송 간 충돌은 Instruction Controller가 순차 실행을 보장하므로 DMEM port selector만 필요.
 - 외부 DMEM의 기준 주소는 `0x1000_0000`; Testbench 메모리 인덱스는 `(dmem_addr - base) >> 2`로 변환. IMEM 주소는 `(PC>>2)`.
+- D-03/D-04: IMEM_BASE=0, DMEM_BASE=0x10000000. Top/TB가 IMEM_BYTES/DMEM_BYTES 파라미터를 공유한다. Fetch는 적재 길이가 아닌 할당 용량 기준이며, TB는 모든 미사용 IMEM word를 0으로 채운다 (실제 fetch 시 INVALID_OPCODE=0x01). BEQ/BNE는 선택된 next PC만 검사하고, JAL target 오류 때 link/PC를 갱신하지 않는다.
 - Testbench 프로파일: 64 KiB IMEM, 16 MiB DMEM 권장. 대형 DMEM 모델은 **시뮬레이터 호스트 메모리**이며 FPGA 내부 BRAM과 분리해 해석.
 
 ## 3. 내부 SRAM과 Port Selector
@@ -106,6 +111,7 @@ Write:
 ### 새 구조
 
 - **Instruction Controller**는 `EXEC GEMM` 1개를 발행하고 `gemm_done`을 기다린다.
+- D-01: CSR write 시 RW 원본 32bit 보존, 실행 설정값 검증은 EXEC snapshot 시에만 수행한다. D-02: 짧은 K bias staging은 현재 제외, K=4는 실행 전 INVALID_CONFIG 및 start/write 금지. 지원 하한은 Phase 5 경계 검증 후 확정한다.
 - **GEMM Controller**는 CSR Snapshot(`SRC0/1/DST/BIAS`, `M,N,K`, Shift/Mode)으로 입력 워드 수(`K/4`), 출력 그룹 수(`ceil(N/4)`), Weight/Bias 시작 Word Offset, 핑퐁 Buffer 선택을 정한다.
 - **GEMM FSM**은 `IDLE→PREP→RUN→DRAIN→DONE`으로 한 레이어만 실행; `DRAIN`은 최종 출력 SRAM Write 에지가 완료되었음을 보장.
 - 기존 `input_word`(8bit), `output_group`(7bit) counter는 재사용하고 **layer counter는 제거**. `address_generator`는 `SRC1_BASE`, `BIAS_BASE`와 CSR 파생값에 따라 계산하도록 수정.

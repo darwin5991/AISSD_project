@@ -1,6 +1,8 @@
 # Programmable NPU v1.0 — Codex 구현 계획
 
-**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **업무 범위:** 이 문서는 계획이며 **Codex 실행/RTL 수정은 아직 수행되지 않음**.
+> 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
+
+**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 0 진단과 Phase 1 Scalar/Fetch 구현·검증을 완료했다. [Phase 1 실행 보고서](08_phase1_report.md)를 따르며, Phase 2는 별도 승인 전 진행하지 않는다.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -28,13 +30,15 @@
 
 ## Phase 1 — ISA Constants, Decoder, PC, GPR, ALU
 
+**실행 상태 (2026-11-24): PASS.** 64KiB/256B 각 61 cases·432 steps·25100 checks, 기존 Python 27 tests 및 Legacy RTL 5종 PASS. 상세 명령·로그·범위는 [08_phase1_report.md](08_phase1_report.md).
+
 **신규 후보:** `04_rtl/isa/npu_isa_pkg.sv`, `04_rtl/isa/instruction_decoder.sv`, `04_rtl/isa/register_file.sv`, `04_rtl/isa/scalar_alu.sv`, `04_rtl/isa/instruction_controller.sv`, `04_rtl/controller/npu_top.sv` (초기에는 Scalar-only skeleton).
 
-**지원 명령:** `LUI`, `ADDI`, `ADD`, `BEQ`, `BNE`, `JAL`, `END`. PC+4, signed Immediate, Branch/JAL target, invalid GPR, illegal opcode 처리.
+**지원 명령:** `LUI`, `ADDI`, `ADD`, `BEQ`, `BNE`, `JAL`, `END`. PC+4, signed Immediate, Branch/JAL target, invalid GPR, illegal opcode 처리. D-03/D-04를 적용하고, 내부 최소 STATUS/ERROR 상태만 두며 CSR bank/Timer/DMEM 동작은 구현하지 않는다. Fetch 검증에 필요한 1clk IMEM TB와 Python machine-word/scoreboard fixture는 이 Phase에 별도로 추가한다. Legacy target/헤더는 보존한다.
 
 **테스트:** Python이 만든 32bit machine-word IMEM에서 프로그램 로드; 카운터 증가 및 `BNE LOOP` 종료; LUI/ADDI를 통한 32bit 주소 상수 생성; `JAL r0,label`; 잘못된 PC와 invalid GPR Fault. `r0=0` invariant.
 
-**완료 조건:** PC trace / GPR scoreboard와 bit-exact 일치, 완주 후 `done=1cycle`, Halt 뒤 추가 Fetch 없음.
+**완료 조건:** PC trace / GPR scoreboard와 bit-exact 일치, 완주 후 `done=1cycle`, Halt 뒤 추가 Fetch 없음. 기본 64KiB 및 별도 축소 IMEM 용량에서 zero fill, 마지막 word/용량 밖, taken/non-taken 잘못된 후보 target, JAL fault 시 link 불변, invalid GPR/encoding 우선순위, Reset 재시작을 확인한다. Phase 1 종료 후 보고하며 별도 승인 전 Phase 2로 진행하지 않는다.
 
 ## Phase 2 — CSR + SETI + Timer + Status/Error
 
@@ -42,7 +46,7 @@
 
 **지원 명령:** `SETI`, `CSRW`, `CSRR`, `TSTART`, `TSTOP`; STATUS/ERROR_CODE/PERF_COUNT/PERF_OVERFLOW RO 처리.
 
-**테스트:** CSR 설정 유지, 음수 imm13 sign extend, `SETADDR` 확대 결과, 일반 CSR readback, Reserved/RO fault, Timer start/stop/reset/overflow 및 idle/Scalar 제외.
+**테스트:** D-01의 RW 원본 보존 및 중간 invalid 값의 조기 Fault 금지, CSR 설정 유지, 음수 imm13 sign extend, `SETADDR` 확대 결과, 일반 CSR readback, Reserved/RO fault, Timer start/stop/reset/overflow 및 idle/Scalar 제외.
 
 **완료 조건:** 모든 CSR ID와 기계어 인코딩이 문서·Python assembler·SV decoder에 공통으로 반영, Timer directed tests PASS.
 
@@ -85,7 +89,7 @@
 
 **절대 보존:** `mac_array.sv`, 내부 input register, signed_multiplier, adder_tree, partial_sum register, accumulator/postprocess 산술, `bias_load` 및 `out_we` 에지 관계.
 
-**테스트:** 독립 FC1/2/3 각각 CSR 기반 GEMM, 입력/출력 버퍼 반대 선택, Packed INT8 Weight 4 Bank 동기 읽기, Bias shift, Out shift, ReLU, N=10 padding, `done` 최종 write 이후, 지원하지 않는 `M>1`/Overflow Config Fault. 기존 Python Golden과 layerwise bit-exact.
+**테스트:** D-02에 따라 K=4는 INVALID_CONFIG/start·SRAM write 없음 확인. K=8/12/16/32 경계 분석·시뮬레이션 후 정확한 최소 지원 K 확정 (현재 staging 추가 금지). 독립 FC1/2/3 각각 CSR 기반 GEMM, 입력/출력 버퍼 반대 선택, Packed INT8 Weight 4 Bank 동기 읽기, Bias shift, Out shift, ReLU, N=10 padding, `done` 최종 write 이후, 지원하지 않는 `M>1`/Overflow Config Fault. 기존 Python Golden과 layerwise bit-exact.
 
 **완료 조건:** 3개 FC의 모든 출력 워드 Golden 일치; 전체 MLP도 3×`EXEC GEMM` 결과가 이전 베이스라인과 동일. Timer GEMM active count 일치.
 
