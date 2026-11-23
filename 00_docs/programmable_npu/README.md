@@ -1,6 +1,6 @@
 # Programmable NPU v1.0 — 문서 색인
 
-> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1~6 Scalar/CSR/Timer/Block/SRAM/GEMM/ARGMAX 구현·검증 PASS / 최소 K=8 확정 / 메모리·PC 복합 Fault 후속 Gate PASS / Phase 6 D-01/D-02 적용·Gate PASS / Phase 7/8 승인 대기**
+> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1~6 Scalar/CSR/Timer/Block/SRAM/GEMM/ARGMAX 구현·검증 PASS / 최소 K=8 확정 / 메모리·PC 복합 Fault 후속 Gate PASS / Phase 6 D-01/D-02 적용·Gate PASS / Phase 7 첫 1/5/100/200장 Application 검증 PASS / 10,000장·Phase 8 별도 승인 대기**
 >
 > 기존 `00_docs/architecture.md`는 **고정 3-Layer MLP 베이스라인**을 설명한다. 이 디렉터리는 그 RTL을 **명령어 구동 NPU**로 확장하기 위한 새로운 구현 계약이다. 기존 성능/정확도 수치를 새 설계의 검증 결과로 인용하지 않는다.
 
@@ -23,7 +23,8 @@
 15. [15_phase5_report.md](15_phase5_report.md): 독립 GEMM/Snapshot/수치·타이밍·회귀 결과와 최소 K 확정
 16. [16_memory_fault_priority_report.md](16_memory_fault_priority_report.md): Phase 5 보존 커밋·별도 브랜치의 메모리/next-PC 오류 통합 및 전체 회귀 PASS
 17. [17_phase6_decisions.md](17_phase6_decisions.md): ARGMAX 복합 Fault·원본 ARG_LEN 범위 검사 확정 (결정 본문 보존)
-18. [18_phase6_report.md](18_phase6_report.md): 독립 ARGMAX/Snapshot/Fault/Timer/실파형·전체 회귀 PASS, 미커밋 작업 결과
+18. [18_phase6_report.md](18_phase6_report.md): 독립 ARGMAX/Snapshot/Fault/Timer/실파형·전체 회귀 PASS (후속 보존 커밋 4d4cd43)
+19. [19_phase7_report.md](19_phase7_report.md): RTL 변경 없이 첫 1/5/100/200장 연속 추론·Golden·정확도·전체 회귀 PASS
 
 ## 이번에 최종 확정한 선택
 
@@ -39,3 +40,17 @@
 - **이번 범위 밖**: RV32I 완전 호환, 명령어 파이프라인, AXI/DDR, 멀티코어, Conv/Attention, 물리 GPR 증설, 연산/전송 중첩, 다중 Timer.
 
 명세 간 충돌 시 [07 설계 결정](07_design_decisions_phase0.md)의 D-01~D-04 및 [10](10_phase3_decisions.md)·[12](12_phase4_decisions.md)·[14 후속 사용자 확정](14_phase5_decisions.md)·[17 Phase 6 확정](17_phase6_decisions.md) → 01의 ISA 기능 계약 → 02의 사이클/인터페이스 계약 → 03의 구현 절차 → 04의 테스트 순서로 판단한다. 기존 베이스라인은 레거시 RTL 해석의 근거이며 새 ISA 명세보다 우선하지 않는다.
+
+## Phase 7 실행과 승인 경계 — 2026-11-24
+
+Phase 6 보존 커밋은 4d4cd43이며, feat/phase7-mnist-20261124에서 Python/Application TB만 추가했다. 17/18번의 커밋 전 HEAD·미구현 계획 표현은 당시 이력이며 현재 구현·커밋 상태는 본 색인과 19번 보고서를 따른다.
+
+G0 데이터/Golden, G1 1장, G2 5장, G3 첫 100장, G4 첫 200장이 모두 PASS했다. 첫 200장은 원본 순서 0~199이며 첫 100장을 포함한다. RTL/Golden은 각각 100/100·200/200 일치하고 Label 정답도 각각 100/100·200/200이다. 전체 MNIST 정확도 수치로 일반화하지 않는다.
+
+conda aissd Python 3.11에서 저장소 루트 기준 실행:
+
+~~~powershell
+& "C:/Users/darwi/.conda/envs/aissd/python.exe" -X utf8 -B 90_scripts/npu/run_scenario.py --vivado-bin D:/AMDDesignTools/2025.2/Vivado/bin
+~~~
+
+기본 명령은 G0~G4 및 Phase 1~6/Memory Fault/Python/Legacy 5종 회귀를 실행한다. --counts로 1/5/100/200의 오름차순 부분집합을 선택하거나 --no-regressions를 사용한 개발 실행은 PARTIAL이며 최종 Gate를 대체하지 않는다. G1에만 중간 Layer STORE가 있고 모든 Application 실행은 Timer/Waveform OFF다. 프로그램은 8 GPR와 기존 ISA만 사용한다. 10,000장, 별도 모델 전환, FPGA/BMEM/합성은 미실행이며 별도 승인 범위다. 커밋·Push는 하지 않았다.

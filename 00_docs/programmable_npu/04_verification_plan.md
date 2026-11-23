@@ -100,7 +100,7 @@ Phase 3 실측 범위: 블록 I-08 및 메모리 M-01~09, 실제 LOAD의 T-02/�
 
 Golden 계산은 기존 `03_model/generate_golden.py`, `03_model/golden/*`, 양자화 로직을 우선 활용하되 **최신 3-stage RTL과 현재 데이터 형식**에 대응하는지를 재검증해야 함. 과거의 측정 결과를 새 설계 PASS로 대체하지 말 것.
 
-Phase 5 실측 범위: G-01~08, 원자적 원본 Snapshot/live CSR 변경 무시, INT32 양방향 wrap와 기존 Saturation, raw 32bit field 검사, 동적 A/B/Weight/Bias offset·마지막 Word, GEMM next-PC/설정 복합 오류 및 runtime prefix 차단을 검증했다. T-03 및 LOAD+GEMM 합산 microbenchmark도 PASS다. 주 173 cases, K 경계 72 cases, Legacy FC 출력 326words, 매 누산/result 갱신의 실제 dump를 Python과 비교했다. [15_phase5_report.md](15_phase5_report.md). 기존 메모리 명령의 PC/data 복합 오류 일반화는 이후 [16번 후속 보고서](16_memory_fault_priority_report.md)에서 완료했다. 독립 ARGMAX는 후속 Phase 6에서 구현·검증했고 아래 결과를 따른다. 전체 application/10,000장 검증은 Phase 7 범위다.
+Phase 5 실측 범위: G-01~08, 원자적 원본 Snapshot/live CSR 변경 무시, INT32 양방향 wrap와 기존 Saturation, raw 32bit field 검사, 동적 A/B/Weight/Bias offset·마지막 Word, GEMM next-PC/설정 복합 오류 및 runtime prefix 차단을 검증했다. T-03 및 LOAD+GEMM 합산 microbenchmark도 PASS다. 주 173 cases, K 경계 72 cases, Legacy FC 출력 326words, 매 누산/result 갱신의 실제 dump를 Python과 비교했다. [15_phase5_report.md](15_phase5_report.md). 기존 메모리 명령의 PC/data 복합 오류 일반화는 이후 [16번 후속 보고서](16_memory_fault_priority_report.md)에서 완료했다. 독립 ARGMAX는 후속 Phase 6에서 구현·검증했고 아래 결과를 따른다. Application은 후속 Phase 7에서 첫 1/5/100/200장 승인 범위를 검증했다. 10,000장은 별도 승인 범위다.
 
 ### 5.1 Phase 6 ARGMAX 테스트 명세 및 실행 결과 — Gate PASS
 
@@ -176,36 +176,39 @@ Python은 packed bytes를 signed INT8로 풀고 처음 L개에서 최초 최대 
 
 최종 Gate는 A-01~A-16·위 매트릭스 및 Phase 1~5/메모리 Fault 후속/Python unit/Legacy RTL 5종 회귀의 실제 PASS와 소스·로그·파형 근거로 **PASS** 판정했다. 첫 요소 뒤 TB 전용 index=15 주입으로 실행 중 오류→추가 처리 차단·Error Halt·Writeback 금지도 검증했다. Phase 7/8은 수행하지 않았다.
 
-## 6. 최종 응용 시나리오
+## 6. 응용 시나리오 — Phase 7 첫 200장 Gate PASS
 
-### S-01 — 1장 End-to-End + 중간 레이어 검증
+2026-11-24 사용자 승인 범위는 G0/G1/G2/G3/G4이며 10,000장과 별도 모델 전환은 포함하지 않는다. [19번 보고서](19_phase7_report.md), [실행 Manifest](../../07_runs/npu_phase7_20261123_220156_054531Z/manifest.json), [실측 metrics](../../07_runs/npu_phase7_20261123_220156_054531Z/metrics.json)를 따른다. 기존 Phase 1~6와 Fault/Legacy 검증은 보존하고 새 Application TB를 사용한다.
 
-- Model Weight Bank×4와 Bias를 **명령어로 내부 SRAM LOAD**.
-- Image 1장 LOAD, FC1→FC2→FC3를 각 `EXEC GEMM`, 중간 FC1/2/3 출력은 `STORE`하여 Python bit-exact Golden과 비교.
-- `EXEC ARGMAX, rd` 결과 `SW`로 DMEM 저장, 정답 Label과 비교.
-- 필요 시 `TSTART/TSTOP`으로 LOAD/GEMM 각각 개별 사이클 측정.
-- 외부 W/Bias 재적재 없이 다음 이미지 처리까지 테스트.
+### G0 — 데이터·생성기·독립 Golden
 
-### S-02 — 몇 장 End-to-End, 반복 Branch
+- 원본 MNIST test IDX 헤더·payload·label을 검사하고 원본 순서 0~199를 선택한다. 체크포인트·IDX·소스 SHA-256과 aissd Python/PyTorch/torchvision/NumPy 버전을 기록한다.
+- 입력 F5, Weight F7/F7/F7, Bias F9/F8/F7, 출력 signed F2/F2/F2. 오프라인 nearest-even, INT32 wrap, FC1/2 ReLU, 산술 우측 shift 10/7/7 후 signed INT8 saturation, ARGMAX lowest-index를 적용한다.
+- 기존 IntegerMLP와 200장 Layer/Prediction, Phase 5 packed-address kernel의 0/7/199번 Layer, 기존 Legacy W0~3/Bias 총 117,283words를 비교한다.
+- 전용 Python unit 9개로 범위·중복·Branch/Immediate/GPR·LI carry·루프 live register·debug STORE·wrap/음수 shift/tie·정확도 분리를 검사한다.
 
-- Python이 N장을 선택하고 주소/마지막 이미지 다음 주소를 생성.
-- `BNE` 루프를 사용하여 해당 N번 정확히 반복, predictions[0..N-1] 일치.
-- 레지스터 8개로 수립한 Pointer Live Range 분석을 Assembly 검사에 포함.
+### S-01 / G1 — 1장 End-to-End
 
-### S-03 — MNIST 10,000장 정확도 (권장 기본 프로파일)
+Weight/Bias 5회 LOAD → Input LOAD → FC1/2/3 각각 EXEC GEMM 및 STORE → ARGMAX → SW → END. FC1/2/3의 128/32/3word 총 163word와 Prediction을 Python에 bit-exact 비교한다. G1의 debug STORE는 r2/r4/r5만 사용한다. Golden/Label 1/1, 모든 중간 출력 PASS다.
 
-- Weight Bank×4 + Bias 처음 1회 LOAD.
-- 각 이미지에서 Input LOAD → FC1/FC2/FC3 EXEC → ARGMAX → `SW` prediction word.
-- **TSTART/TSTOP 없음**, **FC1/FC2/FC3 intermediate STORE 없음**, **Waveform OFF**.
-- 10,000 × 784B = 7,840,000B input; predictions = 10,000×4B=40,000B. Python Dynamic Allocator가 overlap 검증.
-- RTL Prediction 10,000개 모두 Golden/Label과 검증. 정확도는 `correct/10000 ×100`으로 보고, 기존 FP32/기존 INT8 모델의 측정과 비교하되 새 설계의 결과는 실측으로만 기록.
-- Optional: Error/Timeout 발생 이미지 index, PC, 마지막 CSR/GPR 상태를 TB 디버그 로그에 기재.
+### S-02 / G2 — 첫 5장 연속
 
-### S-04 — 별도 모델/가중치 세트
+기존 8 GPR로 BNE 루프를 실행하고 모델 LOAD는 최초 5회만 허용한다. Input 주소 +784, Prediction +4, 최종 Pointer와 반복 횟수, Engine 완료 및 Prediction 5/5를 확인했다. 중간 STORE/Timer/Waveform은 OFF다.
 
-- Python이 두 가지 Weight Set 각각을 외부 DMEM에 배치하고 LOAD 명령으로 선택한 세트를 내부 SRAM에 적재.
-- Model A→B 변환 후 FC1/2/3 결과가 달라지는지 검증, 동일 모델 재선택 시 일치 검증.
-- 모델이 다르더라도 현재 Gemm Bank Count/메모리 실제 Depth/`M=1`, INT8 등의 지원 범위를 벗어나면 Fault 또는 Python 배치 오류로 처리.
+### S-03 / G3·G4 — 첫 100장·200장
+
+- 원본 순서 첫 100장(0~99), 첫 200장(0~199). 실제 RTL G4 결과의 첫 100개와 G3 Prediction도 일치해야 한다.
+- 동일 Assembly 구조에서 Pointer/End 주소만 변경한다. IMEM/DMEM은 64KiB/16MiB이며 Allocator가 정렬·중복·전체 범위를 검사한다.
+- 모델 LOAD 5회 + Input LOAD N회, GEMM 3N회, ARGMAX N회, BNE N회, Prediction SW N회를 확인한다.
+- 외부 메모리는 32bit Single-Port, byte address, 4byte 정렬, Read R 응답을 R+1에서 소비하고 Write는 상승 에지에 완료한다. 기존 내부 SRAM/Datapath는 변경하지 않는다.
+- 가벼운 TB가 LOAD의 src/dst/length 및 실제 데이터 순서, 원본 CSR Snapshot, Prediction 주소/값/개수, END 1cycle/Halt, Fault/timeout을 검사한다. 상세 cycle/event 정답표 배열은 사용하지 않는다.
+- TSTART/TSTOP 없음, Count/armed/overflow=0 유지, Waveform OFF, 중간 Layer STORE 0회. 명령·TB cycle 통계는 Timer 측정과 구분한다.
+- 완료 조건: 정상 END, Fault 없음, Prediction 정확히 N개, RTL/Golden 불일치 0. Label 정답률은 별도 실측하며 임의 하한을 추가하지 않는다.
+- 실측: G3 Golden 100/100·Label 100/100, G4 Golden 200/200·Label 200/200 PASS. 실행 시간·호스트 메모리는 19번과 metrics를 따른다.
+
+### 후속 승인 범위
+
+기존 S-03의 10,000장 정확도 목표와 S-04 모델 전환은 유지하되 이번 Gate 완료 조건에서 제외한다. 10,000장 결과·전체 정확도·FPGA/BMEM 합성을 수행하거나 PASS로 표시하지 않는다. 기존 Phase 1~6/Memory Fault/Python/Legacy 5종 회귀도 모두 실제 재실행 PASS했다.
 
 ## 7. FPGA/BMEM 및 합성 검증
 

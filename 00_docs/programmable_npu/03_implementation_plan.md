@@ -2,7 +2,9 @@
 
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
-**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 4를 6efeec4에 보존한 뒤 사용자 승인에 따라 Phase 5 GEMM 구현·검증을 완료했다. [Phase 5 결과](15_phase5_report.md)의 Gate PASS와 정식 지원 하한 K=8 확정을 기록한다. Phase 6도 후속 승인에 따라 독립 ARGMAX 구현·검증 Gate PASS다. [18번 결과](18_phase6_report.md)를 따르며 Phase 7/8은 별도 승인 전 진행하지 않는다.
+**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행(Phase 5/6 이력):** Phase 4를 6efeec4에 보존한 뒤 사용자 승인에 따라 Phase 5 GEMM 구현·검증을 완료했다. [Phase 5 결과](15_phase5_report.md)의 Gate PASS와 정식 지원 하한 K=8 확정을 기록한다. Phase 6도 후속 승인에 따라 독립 ARGMAX 구현·검증 Gate PASS다. [18번 결과](18_phase6_report.md)를 따르며 Phase 7/8은 별도 승인 전 진행하지 않는다.
+
+**현재 후속 상태:** Phase 6은 4d4cd43에 보존했고, Phase 7 첫 1/5/100/200장과 전체 회귀 Gate PASS다. 아래 Phase 7과 19번 보고서가 이번 승인 범위를 정의한다. 10,000장 및 Phase 8은 미실행이다.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -14,6 +16,8 @@
 6. 모호한 경계 동작을 발견한 경우 **의사결정 항목과 구현 가능한 옵션을 보고**하고, 미승인 새 기능·성능 최적화·ISA 확장은 진행하지 않는다.
 7. 지원하지 않는 Reserved Register/CSR/Opcode/Memory Access는 무시하거나 0으로 읽지 말고 명세상의 Fault로 처리.
 8. 기능별 Pass/Fail 결과를 `07_runs/` 기록으로 남기되, 빌드 산출물과 대용량 메모리 HEX는 기존 `.gitignore`/저장소 정책에 맞게 관리.
+
+**현재 후속 상태:** Phase 6은 4d4cd43에 보존했고, Phase 7 첫 1/5/100/200장 및 전체 회귀 Gate PASS다. 아래 Phase 7과 19번 보고서가 이번 승인 범위를 정의한다. 10,000장 및 Phase 8은 미실행이다.
 
 ## Phase 0 — 기존 RTL 기준선과 검증 방법 확인
 
@@ -148,21 +152,37 @@
 
 완료 조건은 정상 결과/GPR zero-extend·r0 버림, Snapshot, 무부작용 Fault Halt/Reset, Timer 제외, R→R+1 실파형, 전체 회귀 PASS다. **Top done은 END에서만 1클럭**, argmax_done은 내부 완료다. 실제 근거는 18번 보고서/metrics/source snapshot/wave audit에 기록했다. Phase 7/8은 별도 승인 전 진행하지 않는다.
 
-## Phase 7 — Python 생성·검증 하네스
+## Phase 7 — MNIST Application Verification (첫 200장 승인 범위)
 
-**파일 후보:** `90_scripts/npu/` 아래 `run_scenario.py`, `assembler.py` 또는 `customasm` 규칙 파일, `memory_allocator.py`, `weight_packer.py`, `golden_compare.py`; 초기에 **단일 Python Entry-point**로 유지하고 내부 함수/모듈로 점진 분리 가능.
+**현재 상태: Gate PASS.** 사용자 후속 승인으로 이번 완료 범위를 G0 → 1장 → 5장 → 원본 첫 100장 → 첫 200장으로 확정했다. 기존 계획의 10,000장 정확도·별도 모델 전환은 이번 범위에서 제외하고 후속 승인으로 남긴다. 실제 근거는 [19번 보고서](19_phase7_report.md)와 [metrics](../../07_runs/npu_phase7_20261123_220156_054531Z/metrics.json)를 따른다.
 
-**기능:**
+### 구현 및 보존 범위
 
-1. Test Scenario(한 장/몇 장/10,000장, 다른 모델 가중치 세트, microbench) 수신.
-2. Weight/Bias INT8 Packing 및 **4개 은행별** 물리 순서 변환. 자동 외부 Memory Allocation(4byte align), Input/Expected/Output Region 분리, Manifest JSON 출력(필요 시).
-3. Assembly 생성(모델 LOAD 1회 → 실행 루프), 32bit machine code로 Assemble, IMEM HEX/DMEM HEX 출력. `SETADDR` clobber 규칙 준수.
-4. XSim 등 시뮬레이터 실행, `done`까지 기다리거나 timeout 처리, Prediction/Layer Output/Timer의 결과 영역만 dump.
-5. Python bit-exact Golden 비교 및 Accuracy Summary. 실행 프로파일별 파형 기록(짧은 테스트만 ON).
+- 신규 Python: run_scenario.py(단일 진입점/Manifest/실행·회귀/자원 기록), assembler.py(기존 인코더·Label/LI/SETADDR 및 범위 검사), memory_allocator.py(4byte 정렬·중복·16MiB Bounds), weight_packer.py(기존 모델 로더/양자화/Packing), golden_compare.py(INT64 계산 후 INT32 wrap·shift/saturation·분류 비교).
+- 신규 검증: 05_tb/npu/tb_npu_application.sv와 90_scripts/npu/tests/test_application.py.
+- 기존 04_rtl 전체, Phase 1~6·Legacy TB/실행기, 모델·양자화·Golden 코드는 변경하지 않는다. 새 포트·Opcode·CSR·GPR·메모리 프로토콜을 추가하지 않는다.
+- conda aissd Python 3.11, PyTorch/torchvision 실제 import 및 CUDA 인식을 확인했다. Golden은 CPU 정수 계산이다.
 
-**정확도 10,000장:** 처음에 Weight Bank×4/Bias를 LOAD, 매 이미지 `LOAD input→FC1→FC2→FC3→ARGMAX→SW prediction`만 실행. **Timer 명령과 매 레이어 STORE는 기본 생성에서 제외**. Input Pointer +784, Prediction Pointer +4, BNE로 반복.
+### 실행 프로그램과 메모리
 
-**완료 조건:** 1장/몇 장 Layerwise Test, 10,000장 Accuracy Test, 주소 배치 자동화, Output/Golden 비교 모두 PASS. Long-run은 Timer·Waveform OFF로 메모리·시간 절감.
+모델은 Python에서 한 번 로드·양자화하고 W0~3/Bias를 프로그램 시작 때 총 5회 LOAD한다. 반복문은 Input LOAD → FC1/2/3 CSR 설정·EXEC GEMM → EXEC ARGMAX,r5 → SW → Pointer 증가 → BNE다. r1/r3/r6/r7은 loop-live, r2/r4/r5만 임시값이며 SETADDR는 r4를 사용한다. G1 debug STORE도 live register를 보존한다.
+
+G2/G3/G4는 동일한 111word/444byte 코드 구조다. 100/200장의 기계어 차이는 Prediction Pointer와 Input End의 LI 확장 4word뿐이다. 기본 외부 IMEM 64KiB/DMEM 16MiB와 SRAM 7개·1clk Read·MAC R→R+6 계약은 보존한다. 모델+Input+Prediction은 100장 547,932B, 200장 626,732B다. 각 실행의 byte address/크기/HEX hash를 Manifest에 기록한다.
+
+### 수행 순서 및 완료 Gate
+
+| Gate | 실제 검증 | 결과 |
+|---|---|---|
+| G0 | Python unit 9개, 기존 IntegerMLP 200장 Layer 비교, Phase 5 packed kernel 0/7/199번, Legacy model 117,283words | PASS |
+| G1 | 1장 Prediction 및 FC1/2/3 총 163word bit-exact, END | PASS |
+| G2 | 5장 연속·모델 재LOAD 없음·BNE/Pointer·Prediction | PASS |
+| G3 | 원본 첫 100장, Golden 100/100, Label 100/100 | PASS |
+| G4 | 원본 첫 200장, Golden 200/200, Label 200/200 | PASS |
+| 회귀 | Phase 1~6/Memory Fault/Python unit/Legacy 5종 및 기존 소스 보존 | PASS |
+
+모든 Application은 TSTART/TSTOP와 Waveform을 사용하지 않는다. G1에만 Layer STORE를 넣고 G2/G3/G4는 Prediction만 외부 DMEM에 쓴다. TB cycle 통계는 PERF Timer 측정이 아니다. 시간·메모리는 실측값과 측정 범위를 19번에 기록했다. Label 정확도는 실측 보고이며 별도 최소 기준을 추가하지 않는다.
+
+의존성 확인 중 읽기 전용 샌드박스의 임시 디렉터리 제한이 발생했고 승인된 권한에서 같은 aissd import가 성공했다. 패키지 설치·환경 변경이나 RTL 수정은 없었다. 기능/Golden/시뮬레이션 실패·timeout은 없었다. 커밋·Push와 10,000장·Phase 8은 수행하지 않는다.
 
 ## Phase 8 — FPGA BMEM IP 적용 / 합성 / Timing / 보고
 
@@ -181,7 +201,7 @@
 | 4 | 외부 Scalar LW/SW (진행 승인) | DMEM 동기 1clk 동작 PASS |
 | 5 | GEMM | FC1/2/3 Golden bit-exact PASS |
 | 6 | ARGMAX/Halt | 유효/오류 경로 PASS |
-| 7 | Python/Testbench | 소량/10k Accuracy PASS |
+| 7 | Python/Application TB | 승인된 G0~G4·첫 100/200장 Golden 및 전체 회귀 PASS; 10k 별도 |
 | 8 | FPGA | BRAM·Timing·Report 확보 |
 
 ## 10. 예상되는 주요 오류와 방지책
