@@ -208,6 +208,10 @@ Phase 5 실제 검증에서 K=8/12/16/32와 출력 그룹·연속 실행이 PASS
 - **오류 감지 후** `ERROR_CODE` 설정, `STATUS=2`, `fault=1`(Halt 동안 유지), `busy=0`, 이후 메모리 write/엔진 start 불허. `END`면 `STATUS=1`, `done` **1클럭 펄스**, Halt 유지. Reset만 Halt 해제.
 - 주소/길이/구성 오류는 **명령 실행 시작 전 가능한 한 검증**하여 부분 부작용을 줄임. 검증되지 않은 런타임 Fault에서 이미 쓰인 메모리의 rollback은 보장하지 않음.
 - 동일 사이클 여러 오류 가능 시 우선순위: Opcode/Encoding → GPR/CSR → Alignment → Region → Bounds → Config. 첫 오류 코드만 sticky 기록.
+
+2026-11-24 별도 후속 승인: LW/SW, Block LOAD/STORE 및 GEMM은 데이터 오류와 선택된 next-PC Bounds를 명령 시작 전에 함께 판단한다. Alignment(0x05) → Region(0x04) → 데이터/next-PC Memory Bounds(0x06) → Configuration(0x07) 순서로 병합한다. 정상 데이터 주소라도 next-PC가 범위 밖이면 요청을 발행하지 않는다. Opcode/Encoding/GPR/CSR 선행 검사는 유지한다.
+Block은 길이 GPR까지 수집한 뒤 전체 사전 검사를 통과한 경우에만 Engine start를 허용한다. 사전 Fault는 DMEM/SRAM 접근·GPR writeback·LOAD active를 발생시키지 않는다. Scalar의 확장 주소 산술 wrap 규칙은 12번 결정을 유지한다.
+
 - Reset 시 `STATUS=0`, `ERROR_CODE=0`, `fault=0`, `done=0`.
 
 ## 10. 예시 어셈블리 (정확도 테스트 내부)

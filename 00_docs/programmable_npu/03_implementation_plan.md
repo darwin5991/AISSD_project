@@ -166,3 +166,13 @@
 ## 11. 작업별 Codex 보고 형식
 
 각 단계가 끝나면 다음을 포함해 보고한다: (a) 변경한 파일과 기존 파일 영향, (b) 새/수정 포트와 인터페이스, (c) 실행한 테스트 명령과 Pass/Fail, (d) waveform이나 로그 위치, (e) 검증하지 못한 항목, (f) 다음 단계 전 의사결정 필요 여부. 예상 수치와 실측 수치를 구분한다.
+
+
+## 승인된 별도 후속 작업 — 메모리/PC 복합 Fault 우선순위
+
+Phase 5를 5be9059에 먼저 보존한 뒤 fix/memory-fault-priority-20261124에서 작업한다.
+대상은 LW/SW/Block LOAD/STORE의 데이터/next-PC 검사 병합, 사전 접근/시작 차단, Python Golden과 Testbench 일치다.
+명령 4개 × Alignment/Region/Bounds/정상 주소의 마지막 IMEM Word 사례를 필수 검증하고, 선행 인코딩/GPR/CSR 및 Timer 보존도 확인한다.
+Phase 1~5, Python 및 Legacy RTL 5종 회귀가 완료되어야 한다. 보고서·수정은 Phase 5와 별도 커밋으로 관리한다. Phase 6은 승인 범위가 아니다.
+
+최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. Phase 6은 승인 대기다.

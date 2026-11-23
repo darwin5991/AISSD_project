@@ -146,3 +146,15 @@ Phase 5 실측 범위: G-01~08, 원자적 원본 Snapshot/live CSR 변경 무시
 - Fail 즉시 오류 주소/PC/instruction, 기대/실제 값, 첫 불일치 시각, 수정된 파일/Commit을 기록.
 - 큰 테스트 실행 전에 필수 directed tests가 모두 통과해야 함.
 - 명세 변경이 필요한 실패는 Codex가 직접 규칙을 바꾸지 않고 문서 수정안 및 영향 범위를 먼저 제시.
+
+
+## 별도 후속 Gate — 마지막 IMEM의 데이터/next-PC 복합 Fault
+
+LW/SW/Block LOAD/STORE 각각 Alignment+PC Bounds=0x05, Region+PC Bounds=0x04,
+데이터 Bounds+PC Bounds=0x06, 정상 주소+PC Bounds=0x06을 검증한다.
+Block length=0+PC Bounds는 0x06이고, length misalignment+PC Bounds는 0x05다.
+인코딩/GPR/CSR/Opcode 선행 규칙, PC/GPR/RW CSR 보존, 모든 물리 DMEM/SRAM 접근 및 Block start 차단을 확인한다.
+각 사례 전에 정상 LOAD/STORE로 SRAM/DMEM을 준비한다. armed에서 누적 Count=6, unarmed에서 0을 만든 후 Fault가 이를 바꾸지 않는지 비교한다.
+Python 예상 오류를 명시하고 RTL 실제 trace/final-memory dump와 재비교한다. Phase 1~5·Python unit·Legacy 5종 회귀도 필수다.
+
+최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. Phase 6은 승인 대기다.

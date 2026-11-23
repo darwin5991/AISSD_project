@@ -183,13 +183,13 @@ def interpret(image,initial,capacity,inject_pc):
                 elif writing:
                     if op==0x73:update=regs[a]
                 else:value=settings.get(address,{p2.RO["PERF_COUNT"]:count,p2.RO["PERF_OVERFLOW"]:overflow,p2.RO["STATUS"]:0,p2.RO["ERROR_CODE"]:0}.get(address,0))
-            if not status and not err:
+            if not status and not err and not block and not scalar_memory:
                 if next_pc%4:err=5
                 elif not 0<=next_pc<=4092:err=6
             if scalar_memory and not err:
                 imm=((w>>25)<<5)|((w>>7)&31) if store else w>>20
                 ea=regs[a]+s.signed(imm,12)
-                err=scalar_error(ea,capacity)
+                err=p3.merge_memory_errors(scalar_error(ea,capacity),5 if next_pc%4 else (6 if not 0<=next_pc<=4092 else 0))
                 if not err:
                     delay=4
                     data=regs[b] if store else memory.get(ea,0)
@@ -198,7 +198,9 @@ def interpret(image,initial,capacity,inject_pc):
                     else:value=data
             if block and not err:
                 src,dst,n=regs[a],regs[b],regs[rd]
-                err=p3.error_for(src,dst,n,store,capacity);delay=4
+                data_error=p3.error_for(src,dst,n,store,capacity)
+                pc_error=5 if next_pc%4 else (6 if not 0<=next_pc<=4092 else 0)
+                err=p3.merge_memory_errors(data_error,pc_error);delay=4
                 if not err:
                     words=n//4;runtime=(pc==inject_pc)
                     actual_words=1 if runtime else words

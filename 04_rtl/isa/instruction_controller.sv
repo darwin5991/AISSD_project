@@ -27,7 +27,7 @@ module instruction_controller #(
 );
     import npu_isa_pkg::*;
     typedef enum logic [3:0] {
-        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT, MEM_REQ, MEM_WAIT, GEMM_CHECK, GEMM_START, GEMM_WAIT
+        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT, MEM_REQ, MEM_WAIT, GEMM_CHECK, GEMM_START, GEMM_WAIT, XFER_REJECT
     } state_t;
     state_t state;
     wire [31:0] gemm_settings [0:9];
@@ -42,12 +42,15 @@ module instruction_controller #(
             default: memory_error_rank=4;
         endcase
     endfunction
-    assign gemm_check_error=(gemm_next_pc_error==ERR_OK)?gemm_config_error:
-        ((gemm_config_error==ERR_OK || memory_error_rank(gemm_next_pc_error)<memory_error_rank(gemm_config_error))?
-            gemm_next_pc_error:gemm_config_error);
+    function automatic logic [7:0] merge_memory_errors(input logic [7:0] first,second);
+        if(first==ERR_OK) merge_memory_errors=second;
+        else if(second==ERR_OK) merge_memory_errors=first;
+        else merge_memory_errors=(memory_error_rank(first)<=memory_error_rank(second))?first:second;
+    endfunction
+    assign gemm_check_error=merge_memory_errors(gemm_next_pc_error,gemm_config_error);
     logic is_scalar_memory;
     logic [32:0] scalar_effective;
-    logic [7:0] scalar_memory_error;
+    logic [7:0] scalar_memory_error,scalar_check_error;
     logic [31:0] scalar_address,scalar_write_data,scalar_next_pc;
     logic xfer_dmem_en,xfer_dmem_we;
     logic [31:0] xfer_dmem_addr,xfer_dmem_wdata;
@@ -68,6 +71,7 @@ module instruction_controller #(
     logic [31:0] transfer_src,transfer_dst,transfer_next_pc;
     logic transfer_done,transfer_fault,is_transfer;
     logic [7:0] transfer_fault_code;
+    logic [7:0] transfer_pc_error,transfer_data_error,transfer_check_error,transfer_precheck_error;
     logic [2:0] rs2_read_address;
     logic [31:0] immediate, rs1_data, rs2_data, alu_result;
     logic [11:0] csr_address;
@@ -122,7 +126,7 @@ module instruction_controller #(
         .count(perf_count), .overflow(perf_overflow), .armed(timer_armed)
     );
     block_transfer #(.DMEM_BYTES(DMEM_BYTES)) u_transfer(
-        .clk(clk),.rst_n(rst_n),.start(state==XFER_ARGS),
+        .clk(clk),.rst_n(rst_n),.start(rst_n && state==XFER_ARGS && transfer_check_error==ERR_OK),
         .is_store(operation==OP_STORE),.source_address(transfer_src),
         .destination_address(transfer_dst),.length_bytes(rs2_data),
         .busy(xfer_busy),.done(transfer_done),.fault(transfer_fault),
@@ -131,11 +135,15 @@ module instruction_controller #(
         .dmem_wdata(xfer_dmem_wdata),.dmem_rdata(dmem_rdata),
         .sram_en(sram_en),.sram_we(sram_we),.sram_address(sram_address),
         .sram_wdata(sram_wdata),.sram_rdata(sram_rdata),.sram_error(sram_error));
+    assign transfer_data_error=npu_memory_pkg::transfer_error(transfer_src,transfer_dst,
+        rs2_data,operation==OP_STORE,DMEM_BYTES);
+    assign transfer_check_error=merge_memory_errors(transfer_pc_error,transfer_data_error);
     assign gemm_start=rst_n && state==GEMM_START;
     assign is_scalar_memory=(operation==OP_LW)||(operation==OP_SW);
     // Base is unsigned, immediate is signed. Keep carry/borrow before truncation.
     assign scalar_effective={1'b0,rs1_data}+{immediate[31],immediate};
     assign scalar_memory_error=check_scalar_memory(scalar_effective);
+    assign scalar_check_error=merge_memory_errors(next_pc_error,scalar_memory_error);
     // Instruction-serial port ownership; no arbitration, buffering or latency change.
     always_comb begin
         dmem_en=1'b0;dmem_we=1'b0;dmem_addr=32'd0;dmem_wdata=32'd0;
@@ -168,7 +176,8 @@ module instruction_controller #(
     assign busy = (state == FETCH_REQ) || (state == FETCH_WAIT) || (state == EXECUTE) ||
         (state == XFER_ARGS) || (state == XFER_WAIT) ||
         (state == MEM_REQ) || (state == MEM_WAIT) ||
-        (state == GEMM_CHECK) || (state == GEMM_START) || (state == GEMM_WAIT);
+        (state == GEMM_CHECK) || (state == GEMM_START) || (state == GEMM_WAIT) ||
+        (state == XFER_REJECT);
     assign fault = (state == FAULT_HALT);
     // No architectural write occurs on decode/target failure (including JAL link).
     assign register_write = (instruction_commit && writes_rd) ||
@@ -180,6 +189,7 @@ module instruction_controller #(
             pc <= IMEM_BASE;
             instruction <= 32'd0;
             transfer_src<=0;transfer_dst<=0;transfer_next_pc<=0;
+            transfer_pc_error<=ERR_OK;transfer_precheck_error<=ERR_OK;
             scalar_address<=0;scalar_write_data<=0;scalar_next_pc<=0;
             gemm_next_pc<=0;gemm_next_pc_error<=ERR_OK;
             for(integer g=0;g<10;g++) gemm_config[g]<=0;
@@ -218,14 +228,10 @@ module instruction_controller #(
                         // Snapshot first, then merge all memory/config errors by ISA priority.
                         for(integer g=0;g<10;g++) gemm_config[g]<=gemm_settings[g];
                         gemm_next_pc<=next_pc[31:0];gemm_next_pc_error<=next_pc_error;state<=GEMM_CHECK;
-                    end else if (next_pc_error != ERR_OK) begin
-                        state <= FAULT_HALT;
-                        status <= STATUS_ERROR;
-                        error_code <= next_pc_error;
                     end else if(is_scalar_memory) begin
-                        if(scalar_memory_error!=ERR_OK) begin
+                        if(scalar_check_error!=ERR_OK) begin
                             state<=FAULT_HALT;status<=STATUS_ERROR;
-                            error_code<=scalar_memory_error;
+                            error_code<=scalar_check_error;
                         end else begin
                             scalar_address<=scalar_effective[31:0];
                             scalar_write_data<=rs2_data;scalar_next_pc<=next_pc[31:0];
@@ -233,7 +239,11 @@ module instruction_controller #(
                         end
                     end else if(is_transfer) begin
                         transfer_src<=rs1_data;transfer_dst<=rs2_data;
-                        transfer_next_pc<=next_pc[31:0];state<=XFER_ARGS;
+                        transfer_next_pc<=next_pc[31:0];transfer_pc_error<=next_pc_error;state<=XFER_ARGS;
+                    end else if (next_pc_error != ERR_OK) begin
+                        state <= FAULT_HALT;
+                        status <= STATUS_ERROR;
+                        error_code <= next_pc_error;
                     end else begin
                         pc <= next_pc[31:0];
                         state <= FETCH_REQ;
@@ -253,7 +263,15 @@ module instruction_controller #(
                         state<=FAULT_HALT;status<=STATUS_ERROR;error_code<=gemm_error_code;
                     end else if(gemm_done) begin pc<=gemm_next_pc;state<=FETCH_REQ;end
                 end
-                XFER_ARGS: state<=XFER_WAIT;
+                XFER_ARGS: begin
+                    // Third operand is available here; reject before any engine start.
+                    transfer_precheck_error<=transfer_check_error;
+                    if(transfer_check_error!=ERR_OK) state<=XFER_REJECT;
+                    else state<=XFER_WAIT;
+                end
+                XFER_REJECT: begin
+                    state<=FAULT_HALT;status<=STATUS_ERROR;error_code<=transfer_precheck_error;
+                end
                 XFER_WAIT: begin
                     if(transfer_fault) begin
                         state<=FAULT_HALT;status<=STATUS_ERROR;

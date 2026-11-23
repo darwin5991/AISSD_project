@@ -1,6 +1,6 @@
 # Programmable NPU v1.0 — 문서 색인
 
-> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1~5 Scalar/CSR/Timer/Block/SRAM/GEMM 구현·검증 PASS / 최소 K=8 확정 / Phase 6 승인 대기**
+> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1~5 Scalar/CSR/Timer/Block/SRAM/GEMM 구현·검증 PASS / 최소 K=8 확정 / 메모리·PC 복합 Fault 후속 Gate PASS / Phase 6 승인 대기**
 >
 > 기존 `00_docs/architecture.md`는 **고정 3-Layer MLP 베이스라인**을 설명한다. 이 디렉터리는 그 RTL을 **명령어 구동 NPU**로 확장하기 위한 새로운 구현 계약이다. 기존 성능/정확도 수치를 새 설계의 검증 결과로 인용하지 않는다.
 
@@ -21,6 +21,7 @@
 13. [13_phase4_report.md](13_phase4_report.md): Phase 3 보존 커밋 및 Phase 4 Scalar LW/SW 검증
 14. [14_phase5_decisions.md](14_phase5_decisions.md): INT32 wrap·GEMM 오류 우선순위·역할·하한 검증 방침
 15. [15_phase5_report.md](15_phase5_report.md): 독립 GEMM/Snapshot/수치·타이밍·회귀 결과와 최소 K 확정
+16. [16_memory_fault_priority_report.md](16_memory_fault_priority_report.md): Phase 5 보존 커밋·별도 브랜치의 메모리/next-PC 오류 통합 및 전체 회귀 PASS
 
 ## 이번에 최종 확정한 선택
 

@@ -10,6 +10,12 @@ BANKS=[(0x80000000,196),(0x80020000,128),
 def transfer(a,b,c,store=False):
     return (b<<20)|(a<<15)|(int(store)<<12)|(c<<7)|0x2b
 
+def merge_memory_errors(*errors):
+    """Approved memory/next-PC priority, independent of the RTL implementation."""
+    order={5:0,4:1,6:2,7:3}
+    faults=[e for e in errors if e]
+    return min(faults,key=order.__getitem__) if faults else 0
+
 def error_for(src,dst,n,store,capacity):
     ext,inside=(dst,src) if store else (src,dst)
     bank=next(((base,depth) for base,depth in BANKS if base<=inside<base+0x20000),None)
@@ -156,12 +162,14 @@ def interpret(image,initial,capacity,inject_pc):
                 elif writing:
                     if op==0x73:update=regs[a]
                 else:value=settings.get(address,{p2.RO["PERF_COUNT"]:count,p2.RO["PERF_OVERFLOW"]:overflow,p2.RO["STATUS"]:0,p2.RO["ERROR_CODE"]:0}.get(address,0))
-            if not status and not err:
+            if not status and not err and not block:
                 if next_pc%4:err=5
                 elif not 0<=next_pc<=4092:err=6
             if block and not err:
                 src,dst,n=regs[a],regs[b],regs[rd]
-                err=error_for(src,dst,n,store,capacity);delay=4
+                data_error=error_for(src,dst,n,store,capacity)
+                pc_error=5 if next_pc%4 else (6 if not 0<=next_pc<=4092 else 0)
+                err=merge_memory_errors(data_error,pc_error);delay=4
                 if not err:
                     words=n//4;runtime=(pc==inject_pc)
                     actual_words=1 if runtime else words

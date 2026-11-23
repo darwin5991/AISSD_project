@@ -201,3 +201,14 @@ Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산
 - 과제 조건상 최종 **NPU 내부 SRAM 7개**에 Block Memory Generator IP의 Native Single-Port 구성을 적용하고 Primitive Output Register 비활성화. 포트는 `clka/ena/wea/addra/dina/douta`를 대응시키고 Full-Word Write(별도 Byte Write 비활성화) 사용. Read-while-Write 데이터 Hold 계약에 맞도록 `NO_CHANGE`에 해당하는 메모리 Write Mode를 선택·검증. 동작은 `single_port_bram` 모델과 동일한 1clk Read로 맞추고 Simulation과 Post-Synthesis에서 확인.
 - BRAM 내용은 Reset으로 초기화하지 않는다. `initial/$readmemh/$writememh`는 Testbench/외부 모델에만 사용, 합성 대상 코어에서는 사용 금지. 외부 데이터는 LOAD로 내부 SRAM에 적재.
 - 성능·자원·Power/Timing 수치는 실제 Vivado 합성/배치배선 리포트를 통해서만 주장. MAC 변경 없이도 Address MUX/Decoder/CSR/ALU가 추가되므로 타이밍을 다시 측정해야 함.
+
+
+## 메모리/next-PC Fault 우선순위 후속 통합 (2026-11-24)
+
+Phase 5 보존 커밋 5be9059 이후 별도 브랜치에서 수행한다. Controller의 공통 병합 함수로 GEMM/Scalar/Block 모두 Alignment → Region → Bounds → Config를 적용한다.
+LW/SW는 EXECUTE에서 데이터와 next-PC 오류를 병합하므로 정상 요청/응답 및 Fault 타이밍을 유지한다.
+Block은 EXECUTE에서 src/dst/next-PC 검사를 래치하고 XFER_ARGS에서 rs3 길이를 읽어 전체 범위를 검사한다. 성공한 경우에만 기존 Engine을 같은 에지에 시작한다.
+실패하면 Engine을 시작하지 않고 XFER_REJECT를 거쳐 Error Halt한다. 정상 Block의 첫 요청/Read/Write/완료/Timer 일정은 유지하며, next-PC 오류인 Block의 Halt 판정은 길이 수집 뒤 Fetch 기준 age=4다.
+사전 오류에서도 Timer는 기존 Count/armed/overflow를 유지한다. 공유 SRAM Wrapper/BRAM/Block Engine/Datapath 및 외부 포트 변경은 없다.
+
+최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. Phase 6은 승인 대기다.
