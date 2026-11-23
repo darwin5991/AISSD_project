@@ -46,6 +46,8 @@ Python scenario runner
 
 Phase 1 Gate는 I-01~04, I-09의 opcode/encoding/GPR 부분, I-10~12다. I-05~08 및 CSR/Timer는 후속 Phase이며 본 Gate PASS에 포함하지 않는다.
 
+Phase 4 실측 범위: I-05 LW/SW 전체 signed imm12, 32bit data/alias/r0, I-09 실제 GPR/예약 funct3, 주소 정렬/Region/Bounds/wrap 및 마지막 IMEM word의 부작용 차단을 검증했다. 실제 RTL dump를 Python Golden과 재비교했으며, 7개 bank 각각 Scalar/Block 혼합 경로와 Scalar Timer 제외도 PASS다. read R → R+1 GPR writeback 및 SW write 이후 완료는 소규모 WDB/VCD와 scoreboard로 확인했다. [13_phase4_report.md](13_phase4_report.md), [12번 확정](12_phase4_decisions.md)을 따른다.
+
 ## 3. SRAM/DMEM/전송 검증
 
 | ID | 테스트 | 합격 기준 |

@@ -4,7 +4,7 @@
 
 **근거 RTL:** `04_rtl/controller/mlp_top.sv`, `control_unit.sv`, `pipeline_control.sv`, `read_issue_control.sv`, `address_generator.sv`, `layer_config_lut.sv`, `argmax_*`, `04_rtl/memory/memory_wrapper.sv`, `memory_port_mux.sv`, `buffer_router.sv`, `single_port_bram.sv`, `04_rtl/mac_array/*`, `04_rtl/accumulator_postprocess/*` (2026-11-24 GitHub 기본 브랜치 확인). **기존 문서:** `00_docs/architecture.md`, `00_docs/mac_input_pipeline.md`.
 
-현재 구현은 [Phase 3 보고서](11_phase3_report.md)의 Scalar/Fetch/CSR/Timer, 직렬 Block LOAD/STORE, 내부 SRAM 7개와 외부 DMEM 연결까지다. Scalar LW/SW 및 신규 NPU GEMM/ARGMAX 실행은 후속 승인 범위다. [10번 결정](10_phase3_decisions.md)의 Phase 재정의와 DMEM 오류 영역 구분을 적용한다.
+현재 구현은 [Phase 4 보고서](13_phase4_report.md)의 Scalar/Fetch/CSR/Timer, Scalar LW/SW, 직렬 Block LOAD/STORE, 내부 SRAM 7개와 공유 외부 DMEM 연결까지다. 신규 NPU GEMM/ARGMAX 실행은 후속 승인 범위다. [10번 결정](10_phase3_decisions.md)의 Phase/DMEM 영역과 [12번 결정](12_phase4_decisions.md)의 Scalar wrap 검사 순서를 적용한다.
 
 ## 1. 최상위 구조
 
@@ -154,6 +154,8 @@ Write:
 | `argmax_engine` | index, read/compare phase | 가변 1~10 signed INT8 비교, 결과 |
 
 Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. 값 범위 검증과 EXEC snapshot은 아직 구현하지 않았다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 센다. Phase 3의 npu_top은 실제 Block Transfer LOAD active를 연결하며 GEMM active는 아직 0이다. 별도 TB의 기존 테스트용 activity 입력은 유지한다. 신규 npu_memory_wrapper는 기존 single_port_bram 7개를 같은 깊이와 1clk read로 재사용하고 XFER/GEMM/ARGMAX 포트를 분리한다. 새 output data register는 없으며 GEMM/ARGMAX 엔진은 현재 비활성이다. 외부 DMEM은 byte address의 32bit Single-Port 고정 동기 read이고, read R 수락 → R+1 capture → R+2 write로 직렬 전송한다.
+
+Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산하여 정렬 → 산술 wrap → Region → 용량 Bounds를 검사한다. MEM_REQ에서 Scalar 요청, XFER_WAIT에서 기존 Block Transfer 요청을 조합 선택한다. 응답 저장소나 외부 포트/프로토콜을 추가하지 않는다. LW는 read 수락 R 다음 R+1에 GPR writeback/PC 전진하며, SW는 write R 후 R+1에 완료한다. 대기 중 다음 Fetch/GPR/CSR 갱신은 차단한다. 기존 7개 SRAM/Wrapper 및 Block Transfer RTL은 보존했다.
 
 ### Instruction Controller FSM 권장
 

@@ -1,4 +1,4 @@
-// Programmable NPU v1.0: Phase 1 scalar and Phase 2 CSR/Timer constants.
+// Programmable NPU v1.0: scalar, CSR/Timer and block transfer constants.
 package npu_isa_pkg;
     localparam logic [31:0] IMEM_BASE = 32'h0000_0000;
     localparam logic [31:0] DMEM_BASE = 32'h1000_0000;
@@ -28,9 +28,9 @@ package npu_isa_pkg;
     localparam logic [31:0] STATUS_RUNNING = 32'd0,
         STATUS_END = 32'd1, STATUS_ERROR = 32'd2;
 
-    typedef enum logic [3:0] {
+    typedef enum logic [4:0] {
         OP_INVALID, OP_LUI, OP_ADDI, OP_ADD,
         OP_BEQ, OP_BNE, OP_JAL, OP_END,
-        OP_SETI, OP_CSRW, OP_CSRR, OP_TSTART, OP_TSTOP, OP_LOAD, OP_STORE
+        OP_SETI, OP_CSRW, OP_CSRR, OP_TSTART, OP_TSTOP, OP_LOAD, OP_STORE, OP_LW, OP_SW
     } scalar_op_t;
 endpackage

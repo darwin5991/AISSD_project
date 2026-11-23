@@ -63,7 +63,7 @@ RISC-V 형식은 표준 필드 배치만 **선택적으로 차용**한다. 이�
 
 R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 동일. `ADDI`, `LW`, `SW`의 signed imm12 범위 `[-2048,2047]`. Branch offset은 signed 13bit **2의 배수**, JAL offset은 signed 21bit **2의 배수**로 인코딩한다. 실제로 선택된 target이 4byte 정렬이 아니면 MISALIGNED Fault이며 non-taken branch의 후보 target은 검사하지 않는다. 지원하지 않는 funct/CSR 변종/잘못된 예약 비트는 Illegal Encoding Fault.
 
-**Scalar LW/SW는 외부 DMEM에만 접근**한다. 내부 SRAM의 덩어리 전송은 다음 `LOAD/STORE` 사용. `CSRW/CSRR`은 표준 Zicsr 형식의 위 두 형태만 지원하고 기타 CSR 명령의 지원을 보장하지 않는다.
+**Scalar LW/SW는 외부 DMEM에만 접근**한다. Base GPR의 unsigned 32bit 값에 signed imm12를 확장 폭으로 더한다. [Phase 4 사용자 확정](12_phase4_decisions.md): 정렬 → 산술 wrap(MEMORY_BOUNDS) → Region → DMEM 용량 Bounds 순서로 검사하며, 음수/32bit 초과 주소를 잘라서 접근하지 않는다. 내부 SRAM의 덩어리 전송은 다음 `LOAD/STORE` 사용. `CSRW/CSRR`은 표준 Zicsr 형식의 위 두 형태만 지원하고 기타 CSR 명령의 지원을 보장하지 않는다.
 
 ### 3.2 `SETI` — CSR 즉시값 쓰기 (Custom-0)
 
@@ -102,6 +102,8 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 
 | Assembly | 기대 기계어 |
 |---|---:|
+| `LW r5,4(r1)` | `0x0040_A283` |
+| `SW r2,-4(r1)` | `0xFE20_AE23` |
 | `LOAD r1,r2,r3` | `0x0020_81AB` |
 | `STORE r1,r2,r3` | `0x0020_91AB` |
 | `EXEC GEMM` | `0x0000_202B` |

@@ -2,7 +2,7 @@
 
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
-**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 2 검증 상태를 69410b4에 보존한 뒤, 사용자 승인에 따라 Phase 3 블록 LOAD/STORE·SRAM·실제 LOAD Timer 구현과 검증을 완료했다. [Phase 3 실행 보고서](11_phase3_report.md)의 Gate PASS를 보고하며, 사용자 승인 전 Phase 4 Scalar LW/SW로 진행하지 않는다.
+**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행:** Phase 3 검증 상태를 6ccd00d에 보존한 뒤, 사용자 승인에 따라 Phase 4 Scalar LW/SW 구현·검증을 완료했다. [Phase 4 실행 보고서](13_phase4_report.md)의 Gate PASS를 보고하며, 사용자 승인 전 Phase 5 GEMM으로 진행하지 않는다.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -70,11 +70,13 @@
 
 **완료 조건:** SRAM 모든 Bank bit-exact copy, 비정상 접근 Fault, 타이머 LOAD active count와 TB 실제 active edge 수 일치. 기존 RAM 1clk 계약 유지.
 
-> 2026-11-24 사용자 승인: 블록 LOAD/STORE를 Phase 3으로 앞당기고 Scalar LW/SW는 후속 Phase 4 승인 범위로 남긴다. Phase 3 Gate PASS이며, 상세 결과는 [11_phase3_report.md](11_phase3_report.md)에 기록했다. Phase 4는 미시작이다.
+> 2026-11-24 사용자 승인: 블록 LOAD/STORE를 Phase 3으로 앞당기고 Scalar LW/SW는 후속 Phase 4 승인 범위로 남긴다. Phase 3 Gate PASS이며, 상세 결과는 [11_phase3_report.md](11_phase3_report.md)에 기록했다. 이후 사용자 승인으로 Phase 4 Scalar LW/SW를 진행했으며 아래 결과를 따른다.
 
 ## Phase 4 — 외부 IMEM/DMEM 모델, Scalar LW/SW, 주소 검증
 
-**신규 후보:** `04_rtl/isa/external_memory_port.sv` 또는 `dmem_request_mux.sv`(필요 시), `05_tb/npu/npu_memory_model.sv`, `05_tb/npu/tb_npu_scalar.sv`.
+**진행 승인 및 실행 상태 (2026-11-24): PASS.** LW/SW 각각 signed imm12 전체 4096개, 64KiB 315 cases, 4KiB/기본 16MiB 각각 11 cases 및 소규모 파형 1 case. Phase 1~3·Python 27개·Legacy 5종 회귀 PASS. [13_phase4_report.md](13_phase4_report.md). Phase 5는 미시작이며 별도 승인이 필요하다.
+
+**실제 구현:** 기존 instruction_controller/decoder/ISA package 확장, Controller 내부 Scalar/Block DMEM 선택. 별도 tb_npu_phase4.sv, phase4_vectors.py, run_phase4.py를 추가했다. Top/Block Transfer/SRAM Wrapper/BRAM은 수정하지 않았다.
 
 **수행:** 동기식 고정 1-cycle IMEM/DMEM 32bit Single-Port TB. CPU `LW/SW`만 외부 DMEM 범위 지원; `S/B/I/U/J` Immediate decoding/Word Alignment, memory region+bounds faults.
 
@@ -137,7 +139,7 @@
 | 1 | Fetch/ALU/Branch | Branch loop·PC·GPR PASS |
 | 2 | CSR/Timer/Error | CSR·Timer·Fault PASS |
 | 3 | SRAM/Block XFER (사용자 범위 재정의) | 모든 Bank LOAD/STORE 및 Timer/Fault PASS |
-| 4 | 외부 Scalar LW/SW (후속 승인) | DMEM 동기 1clk 동작 PASS |
+| 4 | 외부 Scalar LW/SW (진행 승인) | DMEM 동기 1clk 동작 PASS |
 | 5 | GEMM | FC1/2/3 Golden bit-exact PASS |
 | 6 | ARGMAX/Halt | 유효/오류 경로 PASS |
 | 7 | Python/Testbench | 소량/10k Accuracy PASS |

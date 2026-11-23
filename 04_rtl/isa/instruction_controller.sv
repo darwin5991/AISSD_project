@@ -22,10 +22,27 @@ module instruction_controller #(
     output logic [7:0] error_code
 );
     import npu_isa_pkg::*;
-    typedef enum logic [2:0] {
-        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT
+    typedef enum logic [3:0] {
+        IDLE, FETCH_REQ, FETCH_WAIT, EXECUTE, HALTED, FAULT_HALT, XFER_ARGS, XFER_WAIT, MEM_REQ, MEM_WAIT
     } state_t;
     state_t state;
+    logic is_scalar_memory;
+    logic [32:0] scalar_effective;
+    logic [7:0] scalar_memory_error;
+    logic [31:0] scalar_address,scalar_write_data,scalar_next_pc;
+    logic xfer_dmem_en,xfer_dmem_we;
+    logic [31:0] xfer_dmem_addr,xfer_dmem_wdata;
+    localparam logic [33:0] DMEM_END =
+        {2'b00,npu_isa_pkg::DMEM_BASE}+{1'b0,DMEM_BYTES};
+    // Approved Phase 4 order: alignment, arithmetic wrap, region, capacity.
+    function automatic logic [7:0] check_scalar_memory(input logic [32:0] address);
+        if(address[1:0]!=0) check_scalar_memory=ERR_MISALIGNED;
+        else if(address[32]) check_scalar_memory=ERR_MEMORY_BOUNDS;
+        else if(address[31:28]!=4'h1) check_scalar_memory=ERR_INVALID_REGION;
+        else if({1'b0,address}+34'd4>DMEM_END)
+            check_scalar_memory=ERR_MEMORY_BOUNDS;
+        else check_scalar_memory=ERR_OK;
+    endfunction
     logic [31:0] pc, instruction;
     scalar_op_t operation;
     logic [4:0] rd, rs1, rs2;
@@ -91,20 +108,37 @@ module instruction_controller #(
         .destination_address(transfer_dst),.length_bytes(rs2_data),
         .busy(xfer_busy),.done(transfer_done),.fault(transfer_fault),
         .load_active(xfer_load_active),.error_code(transfer_fault_code),
-        .dmem_en(dmem_en),.dmem_we(dmem_we),.dmem_addr(dmem_addr),
-        .dmem_wdata(dmem_wdata),.dmem_rdata(dmem_rdata),
+        .dmem_en(xfer_dmem_en),.dmem_we(xfer_dmem_we),.dmem_addr(xfer_dmem_addr),
+        .dmem_wdata(xfer_dmem_wdata),.dmem_rdata(dmem_rdata),
         .sram_en(sram_en),.sram_we(sram_we),.sram_address(sram_address),
         .sram_wdata(sram_wdata),.sram_rdata(sram_rdata),.sram_error(sram_error));
+    assign is_scalar_memory=(operation==OP_LW)||(operation==OP_SW);
+    // Base is unsigned, immediate is signed. Keep carry/borrow before truncation.
+    assign scalar_effective={1'b0,rs1_data}+{immediate[31],immediate};
+    assign scalar_memory_error=check_scalar_memory(scalar_effective);
+    // Instruction-serial port ownership; no arbitration, buffering or latency change.
+    always_comb begin
+        dmem_en=1'b0;dmem_we=1'b0;dmem_addr=32'd0;dmem_wdata=32'd0;
+        if(rst_n && state==MEM_REQ) begin
+            dmem_en=1'b1;dmem_we=(operation==OP_SW);
+            dmem_addr=scalar_address;dmem_wdata=scalar_write_data;
+        end else if(rst_n && state==XFER_WAIT) begin
+            dmem_en=xfer_dmem_en;dmem_we=xfer_dmem_we;
+            dmem_addr=xfer_dmem_addr;dmem_wdata=xfer_dmem_wdata;
+        end
+    end
     assign is_transfer=(operation==OP_LOAD)||(operation==OP_STORE);
     assign rs2_read_address=(state==XFER_ARGS)?rd[2:0]:rs2[2:0];
     assign csr_access = rst_n && (state == EXECUTE) &&
         ((operation == OP_SETI) || (operation == OP_CSRW) || (operation == OP_CSRR));
     assign csr_write_request = (operation == OP_SETI) || (operation == OP_CSRW);
     assign csr_write_data = (operation == OP_SETI) ? immediate : rs1_data;
-    assign register_write_data = (operation == OP_CSRR) ? csr_read_data : alu_result;
+    assign register_write_data = (operation == OP_LW) ? dmem_rdata :
+        ((operation == OP_CSRR) ? csr_read_data : alu_result);
     assign execute_error = (decode_error != ERR_OK) ? decode_error : csr_error;
     assign instruction_commit = rst_n && (state == EXECUTE) &&
-        (execute_error == ERR_OK) && (operation != OP_END) && (next_pc_error == ERR_OK);
+        (execute_error == ERR_OK) && (operation != OP_END) &&
+        !is_scalar_memory && (next_pc_error == ERR_OK);
     assign timer_start = instruction_commit && (operation == OP_TSTART);
     assign timer_stop = instruction_commit && (operation == OP_TSTOP);
     assign fetch_error = check_pc({1'b0, pc});
@@ -112,10 +146,12 @@ module instruction_controller #(
     assign imem_addr = pc;
     assign imem_en = rst_n && (state == FETCH_REQ) && (fetch_error == ERR_OK);
     assign busy = (state == FETCH_REQ) || (state == FETCH_WAIT) || (state == EXECUTE) ||
-        (state == XFER_ARGS) || (state == XFER_WAIT);
+        (state == XFER_ARGS) || (state == XFER_WAIT) ||
+        (state == MEM_REQ) || (state == MEM_WAIT);
     assign fault = (state == FAULT_HALT);
     // No architectural write occurs on decode/target failure (including JAL link).
-    assign register_write = instruction_commit && writes_rd;
+    assign register_write = (instruction_commit && writes_rd) ||
+        (rst_n && state==MEM_WAIT && operation==OP_LW);
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -123,6 +159,7 @@ module instruction_controller #(
             pc <= IMEM_BASE;
             instruction <= 32'd0;
             transfer_src<=0;transfer_dst<=0;transfer_next_pc<=0;
+            scalar_address<=0;scalar_write_data<=0;scalar_next_pc<=0;
             done <= 1'b0;
             status <= STATUS_RUNNING;
             error_code <= ERR_OK;
@@ -158,6 +195,15 @@ module instruction_controller #(
                         state <= FAULT_HALT;
                         status <= STATUS_ERROR;
                         error_code <= next_pc_error;
+                    end else if(is_scalar_memory) begin
+                        if(scalar_memory_error!=ERR_OK) begin
+                            state<=FAULT_HALT;status<=STATUS_ERROR;
+                            error_code<=scalar_memory_error;
+                        end else begin
+                            scalar_address<=scalar_effective[31:0];
+                            scalar_write_data<=rs2_data;scalar_next_pc<=next_pc[31:0];
+                            state<=MEM_REQ;
+                        end
                     end else if(is_transfer) begin
                         transfer_src<=rs1_data;transfer_dst<=rs2_data;
                         transfer_next_pc<=next_pc[31:0];state<=XFER_ARGS;
@@ -166,6 +212,9 @@ module instruction_controller #(
                         state <= FETCH_REQ;
                     end
                 end
+                // Read R is consumed at R+1. SW also completes after its write edge.
+                MEM_REQ: state<=MEM_WAIT;
+                MEM_WAIT: begin pc<=scalar_next_pc;state<=FETCH_REQ;end
                 XFER_ARGS: state<=XFER_WAIT;
                 XFER_WAIT: begin
                     if(transfer_fault) begin

@@ -1,4 +1,4 @@
-// Phase 1 scalar + Phase 2 CSR/Timer. Encoding errors precede operand errors.
+// Scalar, CSR/Timer and block instructions. Encoding errors precede operand errors.
 module instruction_decoder (
     input logic [31:0] instruction,
     output npu_isa_pkg::scalar_op_t operation,
@@ -37,6 +37,23 @@ module instruction_decoder (
                 uses_rd = 1'b1;
                 uses_rs1 = 1'b1;
                 writes_rd = 1'b1;
+            end
+            OPC_LW: begin
+                operation = OP_LW;
+                if (instruction[14:12] != 3'b010)
+                    error_code = ERR_ILLEGAL_ENCODING;
+                immediate = {{20{instruction[31]}}, instruction[31:20]};
+                uses_rd = 1'b1;
+                uses_rs1 = 1'b1;
+                writes_rd = 1'b1;
+            end
+            OPC_SW: begin
+                operation = OP_SW;
+                if (instruction[14:12] != 3'b010)
+                    error_code = ERR_ILLEGAL_ENCODING;
+                immediate = {{20{instruction[31]}}, instruction[31:25], instruction[11:7]};
+                uses_rs1 = 1'b1;
+                uses_rs2 = 1'b1;
             end
             OPC_ADD: begin
                 if ((instruction[14:12] != 3'b000) ||
