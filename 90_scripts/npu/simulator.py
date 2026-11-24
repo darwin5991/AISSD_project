@@ -25,9 +25,18 @@ def command(args,build,log,timeout=600):
     # .bat tools require Windows command processing; list2cmdline quotes local paths.
     with (build/log).open('w') as f:
         cmd=' '.join(('"'+str(a)+'"') if '=' in str(a) else subprocess.list2cmdline([str(a)]) for a in args)
-        result=subprocess.run(cmd,cwd=build,env=environment(build),stdout=f,stderr=subprocess.STDOUT,timeout=timeout)
+        process=subprocess.Popen(cmd,cwd=build,env=environment(build),stdout=f,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+        try:
+            code=process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # Terminate only this owned invocation and its child tool processes.
+            subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=f,stderr=subprocess.STDOUT,check=False)
+            process.wait(timeout=30)
+            (build/(log+'.command.json')).write_text(json.dumps(dict(args=[str(a) for a in args],status='TIMEOUT',timeout_seconds=timeout),indent=2))
+            raise
+    (build/(log+'.command.json')).write_text(json.dumps(dict(args=[str(a) for a in args],exit_code=code),indent=2))
     text=(build/log).read_text(errors='replace')
-    if result.returncode or any(x in text for x in ('ERROR:','FATAL_ERROR:','Fatal:','FATAL:')): raise RuntimeError(f'tool failed {build/log}')
+    if code or any(x in text for x in ('ERROR:','FATAL_ERROR:','Fatal:','FATAL:')): raise RuntimeError(f'tool failed {build/log}')
     return text
 def compile_sim(build,full=True):
     build=Path(build).resolve();build.mkdir(parents=True,exist_ok=False)

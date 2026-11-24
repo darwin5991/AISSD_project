@@ -76,3 +76,7 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v5.json --build 99_build/npu_model_8cf69d59`: exit0, FC1 2560/2560, FC2 640/640, FC3 60/60, ARGMAX5/5, zero mismatches. `07_runs/npu/v5_20261125_024215_8631ca`; launcher `99_build/npu_m0/v5.log`.
 - Same command with `v20.json`: exit0 ARGMAX20/20, no intermediate stores. `07_runs/npu/v20_20261125_024243_a4c11b`; launcher `99_build/npu_m0/v20.log`.
 - One weight-load set and image loop per scenario, all requested result words written once. No RTL changes or new repairs. Next V100/V200/V200F.
+
+## M7 V100 PASS / 2026-11-25
+- Source ab7f95d; command `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v100.json --build 99_build/npu_model_8cf69d59`, exit0. ARGMAX100/100; output write counts exact. Evidence `07_runs/npu/v100_20261125_024314_8859ab`; launcher `99_build/npu_m0/v100.log`. No intermediate FC stores.
+- Prepared OOC source/report scripts (not yet run, not gated). Runner watchdog cleanup strengthened to terminate only its owned Windows process tree on timeout and persist per-command args/exit code. Does not change RTL/reference/comparison; next required gate exercises launcher. Next V200. No new repair attempts.
