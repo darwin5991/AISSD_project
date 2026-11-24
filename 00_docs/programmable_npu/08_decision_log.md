@@ -16,6 +16,7 @@
 
 ## New decision entry template
 ```
+
 ID/date:
 Milestone / current branch / anchor commit:
 Question / evidence (source paths/lines or run logs):
@@ -26,3 +27,13 @@ Affected files / spec sections:
 Validation and results:
 Recovery branch if applicable:
 ```
+
+## D004 / 2026-11-25 / tooling repair and provenance
+- Anchor 87a8b86; original tool failures and resolved commands logged under M2 in 09. Native XSim 2025.2 has no `-O` option; use default optimization and explicit `--timescale 1ns/1ps`. Quote entire `key=value` argument through Windows batch wrappers. This avoids changing installed software or global settings; alternative direct unwrapped binaries unnecessary.
+- Four tooling repairs total: two for invalid -O option (first argument-only attempt was ineffective), one timescale default, one batch '=' tokenization. No RTL functional mismatches, recovery branches or reference corrections. Subsequent M2–M7 actual runs validate the resulting launcher.
+- Tool timeouts own a Windows process group and kill only its child tree; source hashes prevent stale snapshot reuse. Run evidence retains failing folders instead of cleanup.
+
+## D005 / 2026-11-25 / M8 preparation
+- Anchor 72f48a1; use explicit new-top source list, OOC xc7a100tcsg324-1, sole 10ns clock, no path exceptions or IO timing claims. Unchanged single_port_bram area decomposition preserved; inspect actual utilization/hierarchy and routed reports.
+- Use nonproject synth (rebuilt hierarchy), opt/place/phys_opt/route default directives with maxThreads6; no seed sweep or architectural alternative. Source/constraint hashes, commands, logs, reports and DCP retained in unique ignored build folder. Power runs separately only after six matching functional gates and routed setup/hold pass.
+- Alternative GUI project or blanket legacy source glob rejected as unnecessary and potentially ambiguous. No semantic/timing-contract changes are authorized by this implementation choice.

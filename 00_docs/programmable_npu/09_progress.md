@@ -5,33 +5,33 @@
 - `conda run -n aissd python -c ...` exit 0: Python 3.11.16, NumPy 2.4.6, PyTorch 2.11.0+cu128, strict model load and sample0 label 7. Checkpoint 1879001 bytes SHA256 matches normative hash. Test IDX available via baseline LayerViewer (download not used).
 - Evidence `99_build/npu_m0/environment.txt`; prior full tool/license preflight `99_build/preflight_5dd1565c7eba/evidence/report.txt`, git permission report `99_build/git_permission_recheck_fb3b7774df7d/report.txt`. D: free ~926 GiB. Vivado/XSim 2025.2 at D:/AMDDesignTools/2025.2/Vivado/bin, target xc7a100tcsg324-1.
 - Implementation files planned: `90_scripts/npu/*`, `04_rtl/isa/*`, new engine files under controller, `npu_memory_wrapper`/DMEM mux, `04_rtl/npu_top.sv`, `05_tb/npu/*`, NPU XDC/Tcl. Commands will be recorded as executed. Next M1. Repairs 0; recovery branches 0.
-Initial state: document package prepared; **all implementation and verification gates NOT RUN**. No new RTL/simulation/synthesis/route performed by document author. Codex fills actual records.
+The document author's original NOT RUN template is superseded by the observed gates below. Chronological evidence follows this table.
 
 | Gate | Status | Commit/source version | Evidence path | Notes |
 |---|---|---|---|---|
-| M0 preflight | NOT RUN | — | — | |
-| M1 toolchain foundations | NOT RUN | — | — | |
-| M2 scalar IC | NOT RUN | — | — | |
-| M3 SRAM/DMA | NOT RUN | — | — | |
-| M4 GEMM | NOT RUN | — | — | |
-| M5 ARGMAX/timer/smoke | NOT RUN | — | — | |
-| M6 V1 | NOT RUN | — | — | |
-| M7 V5 | NOT RUN | — | — | |
-| M7 V20 | NOT RUN | — | — | |
-| M7 V100 | NOT RUN | — | — | |
-| M7 V200 | NOT RUN | — | — | |
-| M7 V200F | NOT RUN | — | — | |
+| M0 preflight | PASS | 2bc8d0b | 99_build/npu_m0/environment.txt | Original preflight reused |
+| M1 toolchain foundations | PASS | 87a8b86 | 99_build/npu_m0/m1_tests.log | 4 tests; IDs0,1,7 golden equality |
+| M2 scalar IC | PASS | 53dfa24 | 07_runs/npu/scalar_377ea75f5d | 19/19 words |
+| M3 SRAM/DMA | PASS | 681be1b | 07_runs/npu/dma_e2a1db6f61 | 24/24 words, N+2 timer |
+| M4 GEMM | PASS | af16594 | 07_runs/npu/gemm_913b7c97c7 | 8/8 words, R+6 schedule |
+| M5 ARGMAX/timer/smoke | PASS | ad1a68c | 99_build/npu_m0/m5.log | Full top 77/77 words |
+| M6 V1 | PASS | fb1aa35 | 07_runs/npu/mnist_1_fc1_fc2_fc3_argmax_20261125_024139_b33a42 | 652 bytes+1 index |
+| M7 V5 | PASS | ab7f95d | 07_runs/npu/v5_20261125_024215_8631ca | 3260 bytes+5 indices |
+| M7 V20 | PASS | ab7f95d | 07_runs/npu/v20_20261125_024243_a4c11b | 20/20 |
+| M7 V100 | PASS | b29c8d0 | 07_runs/npu/v100_20261125_024314_8859ab | 100/100 |
+| M7 V200 | PASS | 72f48a1 | 07_runs/npu/v200_20261125_024439_4aec3b | 200/200 |
+| M7 V200F | PASS | 72f48a1 | 07_runs/npu/v200f_20261125_024812_6bde90 | 2400 bytes+200 indices |
 | M8 synthesis | NOT RUN | — | — | |
 | M9 post-route | NOT RUN | — | — | |
 | M10 power/report | NOT RUN | — | — | |
 
 ## Current checkpoint
-- Branch/base:
-- Last passing milestone / commit:
-- Current action:
-- Retry attempts used / recovery branches used:
-- Next gate:
-- Blockers:
+- Branch/base: npu-v2/20261125 / 2e89b8e994982094a36172a3fd2f65d4a9edaff7
+- Last passing milestone / commit: M7 V200F / 72f48a1
+- Current action: M8 actual OOC synthesis
+- Retry attempts used / recovery branches used: 4 tool-launch repairs / 0
+- Next gate: M8 synthesis
+- Blockers: none currently
 
 ## Log template
 Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, result counts, log paths, issues, next steps. Append failure attempts as well as passes; never replace failing evidence with passing log. Update current checkpoint at each commit.
@@ -86,3 +86,7 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - Legacy leaf regression commands: `conda run -n aissd python 90_scripts/run.py mac_array --vivado-bin D:/AMDDesignTools/2025.2/Vivado/bin` and same `accumulator_postprocess`, process-local environment dirs `99_build/npu_legacy_{mac,acc}_env`. Both exit0. MAC265021/265021 vectors,1325105 checks,0 masked/errors; accumulator265019/265019 vectors/checks,0 masked/errors. Artifacts `07_runs/mac_array_xsim_20261124_174456_858512Z`, `07_runs/accumulator_postprocess_xsim_20261124_174456_858512Z`; launcher logs npu_m0/legacy_mac.log,legacy_acc.log. Old complete controller/top regression not run (new external-only gates replace them); all legacy source unchanged.
 - Final Python foundations rerun after operand-count validation and future capacity assertion: command same M1, `99_build/npu_m0/foundations_final.log`,4/4 PASS; baseline IDs0,1,7 all-layer equality. 10000-image allocation/program capacity ONLY tested:8349132 bytes, <128 IMEM words; no1000/10000 inference/reference accuracy run. Source additions do not alter any valid encoding.
 - No functional failure/diagnostic needed. Total tool repairs4/recovery0. Next V200F.
+
+## M7 V200F PASS / 2026-11-25
+- Source72f48a1, unchanged RTL hashes. `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v200f.json --build 99_build/npu_model_8cf69d59` exit0. FC3 2400/2400 bytes including400 padding bytes; ARGMAX200/200; labels200/200 informational. Evidence `07_runs/npu/v200f_20261125_024812_6bde90`, `99_build/npu_m0/v200f.log`; per-tool args/exit0 recorded in build command JSON.
+- All mandatory functional gates PASS; no functional/reference mismatch or diagnostic rerun. Final RTL unchanged from af16594. No timing/power claim yet. Next M8 actual synth.
