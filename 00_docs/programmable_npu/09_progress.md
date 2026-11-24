@@ -70,3 +70,9 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - Command `conda run -n aissd python 90_scripts/npu/run_verification.py verify --count 1 --save fc1,fc2,fc3,argmax` exit 0. Actual V1: FC1 512/512, FC2 128/128, FC3 12/12 including zero pads, ARGMAX1/1; each output word written once, one reset/start/END. Reference label match1/1.
 - Evidence `07_runs/npu/mnist_1_fc1_fc2_fc3_argmax_20261125_024139_b33a42`, log `99_build/npu_m0/v1.log`, exact build/source hashes in run/logs/simulator_sources.json. Test source version RTL af16594 (unchanged through ad1a68c), precommit Python hashes in manifest.
 - Committed declarative required scenario configs; generic --count/--ids/--save supports later 1000/10000. Repairs4/recovery0. Next M7 sequential gates.
+
+## M7 V5 and V20 PASS / 2026-11-25
+- Source fb1aa35, compiled full RTL source hash verification on reuse `99_build/npu_model_8cf69d59`.
+- `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v5.json --build 99_build/npu_model_8cf69d59`: exit0, FC1 2560/2560, FC2 640/640, FC3 60/60, ARGMAX5/5, zero mismatches. `07_runs/npu/v5_20261125_024215_8631ca`; launcher `99_build/npu_m0/v5.log`.
+- Same command with `v20.json`: exit0 ARGMAX20/20, no intermediate stores. `07_runs/npu/v20_20261125_024243_a4c11b`; launcher `99_build/npu_m0/v20.log`.
+- One weight-load set and image loop per scenario, all requested result words written once. No RTL changes or new repairs. Next V100/V200/V200F.
