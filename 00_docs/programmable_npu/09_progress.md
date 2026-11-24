@@ -52,3 +52,9 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - Anchor 53dfa24; new per-bank owner mux, registered DMA read selector, unchanged 7 BRAM instances/depths/area decomposition. DMA RUN/DRAIN response/data/write pipeline, no extra active completion cycle. DMEM scalar/DMA mux.
 - `conda run -n aissd python 90_scripts/npu/smoke.py dma` exit 0, external 24/24 words exact. All seven banks; A/B last physical word, W/Bias multiword ending at final physical word; LOAD+STORE timer exactly 2*(N+2) each case. No duplicated/omitted external result writes.
 - Evidence `07_runs/npu/dma_e2a1db6f61`; log `99_build/npu_m0/m3.log`; exact source hashes in corresponding `99_build/npu_dma_*/source_hashes.json`. No new failures/repairs; total tool repairs 4, recovery 0. Next M4.
+
+## M4 GEMM PASS / 2026-11-25
+- Anchor 681be1b; final structural `npu_top` directly instantiates new IC/DMA/GEMM/ARGMAX/mux/wrapper and unchanged unpackers/MAC/accumulator. GEMM IDLE/PREP/RUN/DRAIN, start-local packed parameters, weight cursor, one group bubble, legacy delay taps 1/5/6 and delayed output group.
+- `conda run -n aissd python 90_scripts/npu/smoke.py gemm` exit 0; 8/8 external words exact over K=8/12, N=5/8/1, both ping-pong directions, signed random operands, positive/negative bias shifts, saturation/ReLU, padded lanes, nonzero input/W/bias/output bases. A output word190 exercises full 8-bit path.
+- GEMM timer observed through CSRR+SW equals G*Q+G+6 for all three cases (12,14,9). Results through STORE only. Evidence `07_runs/npu/gemm_913b7c97c7`; launcher `99_build/npu_m0/m4.log`. No arithmetic changes or result masks.
+- ARGMAX engine wired but NOT YET GATED; M5 next. Repairs unchanged 4; recovery 0.

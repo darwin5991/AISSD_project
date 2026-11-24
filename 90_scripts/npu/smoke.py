@@ -56,7 +56,30 @@ def dma(build):
             'LOAD x1,x2,x3','ADDI x1,x2,0',f'ADDI x2,x6,{len(e)*4}','STORE x1,x2,x3','TSTOP','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+count)*4}(x6)']
         e+=pattern+[2*(count+2)]
     a+=['END'];return run_case('dma','\n'.join(a),e,data,build)
+def gemm(build):
+    import numpy as np
+    from reference import gemm as math_gemm
+    from memory_builder import pack8,BANKS
+    a=['LI x6,0x10001000'];e=[];data={};cursor=0x10000000
+    def load_words(words,dest):
+        nonlocal cursor
+        for i,w in enumerate(words):data[cursor+4*i]=int(w)
+        a.extend([f'LI x1,{cursor}',f'LI x2,{dest}',f'LI x3,{4*len(words)}','LOAD x1,x2,x3']);cursor+=4*len(words)
+    rng=np.random.default_rng(20261125)
+    for k,n,src,dst,bs,os,relu,io,oo in [(8,5,'A','B',-1,0,False,12,16),(12,8,'B','A',3,2,True,8,760),(8,1,'A','B',2,7,False,0,0)]:
+        g=(n+3)//4;x=rng.integers(-128,128,k,dtype=np.int16).astype(np.int8)
+        w=rng.integers(-128,128,(n,k),dtype=np.int16).astype(np.int8);b=rng.integers(-128,128,n,dtype=np.int16).astype(np.int8)
+        yp=np.pad(math_gemm(x,w,b,bs,os,relu),(0,4*g-n));wp=np.pad(w,((0,4*g-n),(0,0)));bp=np.pad(b,(0,4*g-n))
+        load_words(pack8(x),BANKS[src]+io)
+        for j in range(4):load_words(pack8(wp[j::4]),BANKS['W'+str(j)]+20)
+        load_words(pack8(bp),BANKS['Bias']+12)
+        a += [f'SETADDR SRC0_BASE,{BANKS[src]+io}',f'SETADDR SRC1_BASE,{BANKS["W0"]+20}',f'SETADDR DST_BASE,{BANKS[dst]+oo}',
+              f'SETADDR BIAS_BASE,{BANKS["Bias"]+12}',f'SETADDR GEMM_DIM,{(1<<20)|(n<<10)|k}',f'SETI GEMM_CFG,{int(relu)*2048+os*64+(bs&63)}',
+              'TSTART','EXEC GEMM','TSTOP',f'LI x1,{BANKS[dst]+oo}',f'ADDI x2,x6,{len(e)*4}',f'LI x3,{g*4}','STORE x1,x2,x3','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+g)*4}(x6)']
+        e += [int(v) for v in pack8(yp)]+[g*(k//4)+g+6]
+    a+=['END'];return run_case('gemm','\n'.join(a),e,data,build)
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('gate',choices=['scalar','dma']);p.add_argument('--build');args=p.parse_args()
-    b=Path(args.build) if args.build else compile_sim(ROOT/'99_build'/('npu_'+args.gate+'_'+uuid.uuid4().hex[:8]),'dma' if args.gate=='dma' else False)
-    {'scalar':scalar,'dma':dma}[args.gate](b)
+    p=argparse.ArgumentParser();p.add_argument('gate',choices=['scalar','dma','gemm']);p.add_argument('--build');args=p.parse_args()
+    mode={'scalar':False,'dma':'dma','gemm':True}[args.gate]
+    b=Path(args.build) if args.build else compile_sim(ROOT/'99_build'/('npu_'+args.gate+'_'+uuid.uuid4().hex[:8]),mode)
+    {'scalar':scalar,'dma':dma,'gemm':gemm}[args.gate](b)
