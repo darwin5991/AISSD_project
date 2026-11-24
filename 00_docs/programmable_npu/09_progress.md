@@ -47,3 +47,8 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - `conda run -n aissd python 90_scripts/npu/smoke.py scalar --build 99_build/npu_scalar_573340c9` exit 0. External DMEM 19/19 words equal; each result written once; END pulse/HALTED/restart ignored verified. Includes scalar arithmetic/logic/shift/wrap, LW/SW, packed CSR truncation/sign, x0, BEQ/BNE and JAL link.
 - Evidence `07_runs/npu/scalar_377ea75f5d`, simulator hashes/logs `99_build/npu_scalar_573340c9`, launcher log `99_build/npu_m0/m2_args_repair.log`.
 - Preserved tool failures: cf6d25d1 and a4fff9b0 unsupported xelab -O (first repair incorrectly changed argument; second removed unsupported switch); b01feb56 missing default timescale (fixed --timescale 1ns/1ps); scalar_8e0ac731d5 XSim batch '=' tokenization (fixed quoting complete key=value). No RTL result mismatch. Four substantive tool repairs total across three distinct blockers; no recovery branches. Next M3.
+
+## M3 SRAM/DMA PASS / 2026-11-25
+- Anchor 53dfa24; new per-bank owner mux, registered DMA read selector, unchanged 7 BRAM instances/depths/area decomposition. DMA RUN/DRAIN response/data/write pipeline, no extra active completion cycle. DMEM scalar/DMA mux.
+- `conda run -n aissd python 90_scripts/npu/smoke.py dma` exit 0, external 24/24 words exact. All seven banks; A/B last physical word, W/Bias multiword ending at final physical word; LOAD+STORE timer exactly 2*(N+2) each case. No duplicated/omitted external result writes.
+- Evidence `07_runs/npu/dma_e2a1db6f61`; log `99_build/npu_m0/m3.log`; exact source hashes in corresponding `99_build/npu_dma_*/source_hashes.json`. No new failures/repairs; total tool repairs 4, recovery 0. Next M4.

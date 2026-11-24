@@ -46,7 +46,17 @@ def scalar(build):
     a+=['JAL x3,link','bad: ADDI x1,x0,99','link: ADDI x1,x3,0',f'SW x1,{len(e)*4}(x6)','END']
     words=assemble('\n'.join(a));jal_pc=next(i*4 for i,w in enumerate(words) if w&127==0x6f);e.append(jal_pc+4)
     return run_case('scalar','\n'.join(a),e,build=build)
+def dma(build):
+    a=['LI x6,0x10001000'];e=[];data={}
+    for bank,offset in [(0,780),(1,508),(2,117108),(3,117108),(4,117108),(5,117108),(6,640)]:
+        count=1 if bank<2 else 3
+        pattern=[(0x807f00ff+bank*0x10203+i*0x1234567)&0xffffffff for i in range(count)]
+        for i,w in enumerate(pattern):data[0x10000000+bank*16+i*4]=w
+        a+=['TSTART',f'LI x1,{0x10000000+bank*16}',f'LI x2,{0x80000000+bank*0x20000+offset}',f'LI x3,{count*4}',
+            'LOAD x1,x2,x3','ADDI x1,x2,0',f'ADDI x2,x6,{len(e)*4}','STORE x1,x2,x3','TSTOP','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+count)*4}(x6)']
+        e+=pattern+[2*(count+2)]
+    a+=['END'];return run_case('dma','\n'.join(a),e,data,build)
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('gate',choices=['scalar']);p.add_argument('--build');args=p.parse_args()
-    b=Path(args.build) if args.build else compile_sim(ROOT/'99_build'/('npu_scalar_'+uuid.uuid4().hex[:8]),False)
-    scalar(b)
+    p=argparse.ArgumentParser();p.add_argument('gate',choices=['scalar','dma']);p.add_argument('--build');args=p.parse_args()
+    b=Path(args.build) if args.build else compile_sim(ROOT/'99_build'/('npu_'+args.gate+'_'+uuid.uuid4().hex[:8]),'dma' if args.gate=='dma' else False)
+    {'scalar':scalar,'dma':dma}[args.gate](b)

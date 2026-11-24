@@ -6,7 +6,11 @@ BIN=Path('D:/AMDDesignTools/2025.2/Vivado/bin')
 def sources(full=True):
     files=[ROOT/'04_rtl/isa/npu_isa_pkg.sv']
     files+=sorted(p for p in (ROOT/'04_rtl/isa').glob('*.sv') if p.name!='npu_isa_pkg.sv')
-    if full:
+    if full=='dma':
+        files += [ROOT/'04_rtl/controller/dma_controller.sv']
+        files += [ROOT/'04_rtl/memory'/n for n in ('single_port_bram.sv','npu_memory_wrapper.sv','dmem_port_mux.sv')]
+        files += [ROOT/'05_tb/npu/dma_harness.sv']
+    elif full:
         for folder in ('common','mac_array','accumulator_postprocess'): files+=sorted((ROOT/'04_rtl'/folder).glob('*.sv'))
         files += [ROOT/'04_rtl/controller'/n for n in ('unpack_int8x4.sv','argmax_unit.sv','argmax_tracker.sv','argmax_update.sv','byte_select4.sv','signed_compare8.sv','dma_controller.sv','gemm_controller.sv','argmax_engine.sv')]
         files += [ROOT/'04_rtl/memory'/n for n in ('single_port_bram.sv','npu_memory_wrapper.sv','dmem_port_mux.sv')]
