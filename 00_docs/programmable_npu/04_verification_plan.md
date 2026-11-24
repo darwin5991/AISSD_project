@@ -1,5 +1,7 @@
 # Programmable NPU v1.0 — 검증 계획 및 Acceptance Criteria
 
+> **Phase 8 후속 최신 계약(2026-11-24):** GEMM은 소프트웨어에서 검증한 정상 설정을 전제로 한다. GEMM 하드웨어의 설정/Region/Bounds/Runtime 오류 검사는 제거했다. 원본 Snapshot, next-PC, 다른 명령어의 오류 처리와 SRAM/MAC/Timer 계약은 유지한다. [21번 결정](21_phase8_legacy_gemm_decisions.md)과 [22번 구현 보고서](22_phase8_legacy_gemm_report.md)가 이전 GEMM Fault 서술보다 우선한다.
+
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
 **방침:** Python이 테스트셋/주소/기계어/Golden을 생성하고, TB가 `imem`, `dmem`을 초기화해 DUT를 구동한 뒤 결과 영역만 추출한다. Testbench에서 실제 SRAM을 직접 수정하지 않고 정상 명령어 LOAD/STORE 경로를 검증. 시간 측정은 선택적인 짧은 Microbenchmark에서만 수행.
@@ -90,9 +92,9 @@ Phase 3 실측 범위: 블록 I-08 및 메모리 M-01~09, 실제 LOAD의 T-02/�
 | G-03 | FC3 128→10 (A→B) | 유효 10bytes bit-exact, 마지막 2 padding byte 제외 |
 | G-04 | GEMM 연속 3회, 각각 CSR 변경 | 이전 `layer_config_lut` 순서와 동일 계산 |
 | G-05 | 서로 다른 Weight Set로 반복 실행 | 해당 선택한 내부 SRAM 데이터로 계산, Weight 잔류 재사용 확인 |
-| G-06 | M/N/K/Shift/Mode·SRAM 역할·실제 깊이·복합 오류 | 형상은 INVALID_CONFIG, 역할은 INVALID_REGION, 깊이는 MEMORY_BOUNDS; Alignment→Region→Bounds→Config 우선순위 |
+| G-06 | M/N/K/Shift/Mode·SRAM 역할·실제 깊이 | 최신 GEMM 계약은 생성기 검사로 확인; 제거한 하드웨어 Fault 조합은 실행 대상에서 제외 |
 | G-07 | R~R+6 Pipeline | input_valid, psum_valid, bias_load, result_load, out_we 시점 맞음 |
-| G-08 | D-02 짧은 K | 선행 오류가 없는 K=4는 INVALID_CONFIG/start·write 없음; K=8/12/16/32 PASS 후 사용자 승인으로 정식 하한 K=8 확정 |
+| G-08 | 짧은 K | K=4는 소프트웨어 거부; K=8/12/16/32 정상 실행·Bias·R→R+6 유지 |
 | A-01 | ARGMAX signed negative/positive | signed 기준 최대 인덱스 반환 |
 | A-02 | ARGMAX tie / length=1,3,4,9,10 | 동점 중 가장 작은 인덱스 우선, 길이만큼만 비교 |
 | A-03 | FC3 N=10 padding | 10개만 비교, 나머지 2개 무시 |
@@ -247,3 +249,15 @@ Block length=0+PC Bounds는 0x06이고, length misalignment+PC Bounds는 0x05다
 Python 예상 오류를 명시하고 RTL 실제 trace/final-memory dump와 재비교한다. Phase 1~5·Python unit·Legacy 5종 회귀도 필수다.
 
 최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. 이 메모리 후속 작업 당시 Phase 6은 승인 대기였으며, 이후 별도 승인으로 완료한 Phase 6 결과는 [18번 보고서](18_phase6_report.md)를 따른다.
+
+## 9. Phase 8 Legacy GEMM 재사용 Gate
+
+21번 결정을 따른다. G0 계약/소스 확인 → G1 연결 → G2 주소/Cursor → G3 정상 GEMM/파형 → G4 첫 200장 → G5 선택 회귀 → G6 FPGA 순서다. 실제 결과는 22번 보고서와 각 새 Run에서 확인한다.
+
+정상 Phase 5는 run_phase5.py --reuse-gate g3로 실행한다. 72개 K/N/방향/유효 경계, Shift/INT32 수치, Snapshot, 연속 GEMM, FC 326word, Timer와 정상 설정의 next-PC 차단을 포함한다. 기존 GEMM 잘못된 설정/Runtime 주입/복합 Fault는 제거한 계약으로 분류하며 새 PASS로 주장하지 않는다. 과거 테스트와 로그는 보존한다.
+
+G2는 --reuse-gate g2로 비영 Base/끝 Word/A↔B/Output A>=128를 검사한다. audit_gemm_reuse_wave.py는 실제 작은 VCD에서 S+2, R+1/R+4/R+5/R+6, Bias, 한 사이클 공백과 Cursor Read-only 증가를 독립 확인한다.
+
+Application은 run_scenario.py --counts 200 --no-regressions로 기존 생성기/TB를 재사용한다. 원본 첫 200장, 모델 LOAD 5회+Input LOAD 200회, GEMM 600회, ARGMAX/Prediction 200회, 정상 END/Golden 불일치 0을 요구한다. Timer/Waveform/중간 Layer STORE OFF, 10,000장 미실행이다. 이 실행의 기존 Phase 7 전체 Gate 표시는 PARTIAL이며 이번 G4의 200장 완료와 구분한다.
+
+G5는 run_gemm_reuse_regressions.py의 Scalar/Python/Legacy 5종, Scalar/Block 정상 혼합, GEMM→ARGMAX 양방향 및 연속 ARGMAX를 사용한다. G6은 기존 동일 FPGA/10ns 제약과 Flow, 새 BRAM 검토/Netlist 기능/Reset/DRC/Setup/Hold로 판정한다. Timing FAIL이면 변경 확대 없이 중단한다.

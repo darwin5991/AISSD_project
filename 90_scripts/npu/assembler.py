@@ -5,6 +5,7 @@ import phase3_vectors as p3
 import phase4_vectors as p4
 import phase5_vectors as p5
 import phase6_vectors as p6
+from gemm_config import validate_gemm_config
 
 CSR = p2.RW
 LAYERS = (
@@ -93,6 +94,9 @@ class Assembler:
         return self.words
 
 def build_program(layout, debug_layers=False):
+    # Validate every complete layer before emitting any program words.
+    for config in LAYERS:
+        validate_gemm_config(config)
     r = layout.regions
     a = Assembler()
     loads = []

@@ -219,7 +219,7 @@ def main():
     try:
         tools=legacy.find_tools(args.vivado_bin)
         snap=out/"source_snapshot"
-        sources=set(RTL+NEW+["90_scripts/run.py","90_scripts/npu/run_phase1.py"]+
+        sources=set(RTL+NEW+["90_scripts/run.py","90_scripts/npu/run_phase1.py","90_scripts/npu/gemm_config.py"]+
                     [p.relative_to(ROOT).as_posix() for p in (ROOT/"90_scripts/npu").glob("phase*_vectors.py")]+
                     ["03_model/generate_golden.py"]+
                     [p.relative_to(ROOT).as_posix() for p in (ROOT/"03_model/src").glob("*.py")])

@@ -1,5 +1,7 @@
 # Programmable NPU v1.0 — RTL 아키텍처 및 인터페이스 명세
 
+> **Phase 8 후속 최신 계약(2026-11-24):** GEMM은 소프트웨어에서 검증한 정상 설정을 전제로 한다. GEMM 하드웨어의 설정/Region/Bounds/Runtime 오류 검사는 제거했다. 원본 Snapshot, next-PC, 다른 명령어의 오류 처리와 SRAM/MAC/Timer 계약은 유지한다. [21번 결정](21_phase8_legacy_gemm_decisions.md)과 [22번 구현 보고서](22_phase8_legacy_gemm_report.md)가 이전 GEMM Fault 서술보다 우선한다.
+
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
 **근거 RTL:** `04_rtl/controller/mlp_top.sv`, `control_unit.sv`, `pipeline_control.sv`, `read_issue_control.sv`, `address_generator.sv`, `layer_config_lut.sv`, `argmax_*`, `04_rtl/memory/memory_wrapper.sv`, `memory_port_mux.sv`, `buffer_router.sv`, `single_port_bram.sv`, `04_rtl/mac_array/*`, `04_rtl/accumulator_postprocess/*` (2026-11-24 GitHub 기본 브랜치 확인). **기존 문서:** `00_docs/architecture.md`, `00_docs/mac_input_pipeline.md`.
@@ -81,7 +83,7 @@ Write:
 1. SRAM 물리 인스턴스 7개와 포트 형식 `(en,we,word_addr,wdata,rdata)` 유지.
 2. `GEMM`, `ARGMAX`, `BLOCK_XFER` 중 활성 소유자를 선택하는 SRAM 접근 MUX 추가. 이 단계에서 `busy`는 Top 전체 실행 상태이지 SRAM 소유자를 의미하지 않는다.
 3. Transfer Engine에서 **A/B, W0..W3, Bias 모두** 읽기/쓰기를 허용. 특히 Weight/Bias에 `core_we=0`으로 고정한 기존 연결을 새 Transfer Write 경로로 우회/대체해야 함.
-4. 내부 주소는 `0x8000_0000` 기반 32bit byte address. Bank Base와 실제 물리 깊이 검증 후 word address를 RAM 폭(8/7/15/8bit)에 맞게 전달. 해당 Bank의 reserved 128 KiB 창 나머지는 invalid.
+4. 내부 주소는 `0x8000_0000` 기반 32bit byte address. XFER/ARGMAX는 하드웨어에서, GEMM은 소프트웨어 생성 시 Bank Base와 실제 깊이를 검사한 뒤 word address를 RAM 폭(8/7/15/8bit)에 맞게 전달. 해당 Bank의 reserved 128 KiB 창 나머지는 invalid.
 5. GEMM은 Input Buffer 한 개 읽기 + 반대쪽 Output Buffer 쓰기 + Weight 4개 병렬 읽기 + Bias 읽기를 허용. 모두 **서로 다른 SRAM 단일 포트**이므로 충돌 없음. 기존 `buffer_router`의 핑퐁 선택 로직 재사용 가능하지만 내부 base/offset 디코딩 기능은 추가 필요.
 6. ARGMAX는 A 또는 B 입력 Buffer 읽기만 허용. 같은 SRAM 포트로 동시에 GEMM 실행하지 않음.
 7. 기존 TB 직접 쓰기 경로는 기존 RTL 회귀 테스트용으로 보존하거나 Legacy Wrapper에 격리. **최종 프로그래머블 NPU 정상 실행은 반드시 LOAD/STORE 명령을 통해 데이터를 이동**해야 함.
@@ -102,26 +104,15 @@ Write:
 - 한 명령어는 한 내부 SRAM Bank에서 시작/끝나야 함. 전송 중 주소는 내부 로컬 word cursor로 증가하며, `rs1/rs2/rs3` GPR 원본은 불변.
 - 추후 읽기/쓰기를 Word Pipeline으로 겹치는 최적화는 **동작/주소/종료/Timer 규칙을 보존하는 경우만 허용**, 초기 Codex 구현 단계에서는 생략.
 
-## 4. GEMM 실행 경로 재구성
+## 4. GEMM 실행 경로 — Legacy 실행 제어 재사용
 
-Phase 5 구현 승인은 [14번 결정](14_phase5_decisions.md)을 따른다. CSR file의 10개 설정을 병렬 출력하고 Instruction Controller에서 원자적 Snapshot → CHECK → START → WAIT를 수행한다. 검증 전 Engine start/메모리 접근/Timer active는 금지한다.
-독립 GEMM Engine은 기존 unpack/MAC/Accumulator를 연결하고, layer 없는 Controller가 PREP 1edge → RUN → DRAIN → 완료 → IDLE로 실행한다. 최종 Write 이후에만 done을 알린다.
-Wrapper의 기존 GEMM bank별 물리 포트를 사용하며, 주소는 축소 전에 전체 설정/끝 주소 및 실행 중 접근을 검사한다. 입력/출력은 반대 Buffer이고 Weight 4 bank는 같은 offset으로 병렬 Read한다.
+21번 최신 계약을 적용한다. CSR File의 원본 10개 설정은 Instruction Controller가 EXEC 수락 시 Snapshot한다. 기존 GEMM_CHECK는 next-PC 확인을 유지하고 Start/Wait 인터페이스도 보존한다. GEMM 설정/메모리 Bounds/Runtime 검증은 소프트웨어 생성 단계로 옮겼다.
 
-### 현재 구조
+gemm_controller는 control_state_pkg의 IDLE/PREP/RUN/DRAIN 상태와 기존 pipeline_control/read_issue_control, counter_en 두 개를 사용한다. layer_index=0이며 Layer 관련 출력은 사용하지 않는다. Start S에서 설정 저장/PREP, S+1 RUN 진입, S+2 첫 Read다. layer_stored의 최종 Write 에지에서 Done을 올리고 IDLE로 복귀한다. 기존 gemm_engine/Top/Instruction Controller 포트는 유지했다.
 
-현재 `control_unit.sv`는 `start → FC1 → FC2 → FC3 → ARGMAX → done` 자동 진행. `layer_config_lut.sv`가 고정 3 Layer 설정을 제공하며, `control_fsm.sv`와 `read_issue_control.sv`에 `layer_index`와 ARGMAX 자동 전이가 들어 있다.
+주소는 Input Base+입력 Counter, Weight Cursor, Bias Base+Group, Output Base+6단 지연 Group이다. Weight Cursor는 W0~W3에 공통으로 전달되고 Read에서만 증가한다. Output은 현재 Group을 사용하지 않는다. 물리 Base 폭은 A/B/Bias 8bit 및 Weight 15bit이고 기존 15bit Word 포트에 연결한다.
 
-### 새 구조
-
-- **Instruction Controller**는 `EXEC GEMM` 1개를 발행하고 `gemm_done`을 기다린다.
-- D-01: CSR write 시 RW 원본 32bit 보존, 실행 설정값 검증은 EXEC snapshot 시에만 수행한다. D-02: 짧은 K bias staging은 현재 제외, K=4는 선행 오류가 없으면 실행 전 INVALID_CONFIG 및 start/write 금지. 정식 지원 하한 K=8은 Phase 5 경계 검증 후 사용자 승인으로 확정했다.
-- **GEMM Controller**는 CSR Snapshot(`SRC0/1/DST/BIAS`, `M,N,K`, Shift/Mode)으로 입력 워드 수(`K/4`), 출력 그룹 수(`ceil(N/4)`), Weight/Bias 시작 Word Offset, 핑퐁 Buffer 선택을 정한다.
-- **GEMM FSM**은 `IDLE→PREP→RUN→DRAIN→DONE`으로 한 레이어만 실행; `DRAIN`은 최종 출력 SRAM Write 에지가 완료되었음을 보장.
-- 기존 `input_word`(8bit), `output_group`(7bit) counter는 재사용하고 **layer counter는 제거**. `address_generator`는 `SRC1_BASE`, `BIAS_BASE`와 CSR 파생값에 따라 계산하도록 수정.
-- 기존 `pipeline_control`의 R+1~R+6 제어 지연, `mac_input_valid`, `bias_load`, `result_load`, `out_we`는 최대한 그대로 유지. `read_issue_control`의 layer 조건/출력 종료 조건만 설정 기반으로 수정.
-- `mac_array.sv`, Dot-product, `accumulator_postprocess.sv`, Bias alignment, ReLU, Shift, Saturation은 **계산 규칙/지연 변경 금지** (실제 문제가 재현되었을 때만 별도 승인 후 수정).
-- `SRC1_BASE`는 W0 주소이지만 weight 데이터는 W0..W3 **동일 offset**에서 병렬로 읽음. 이 제약과 Weight Bank 파일별 packing은 Python 및 ISA 문서에 명시.
+config_error/error_code는 ERR_OK, fault=0이며 execute_enable은 active다. 원본 Snapshot 및 다른 명령어의 오류 검사는 보존한다. SRAM/Owner MUX/응답 경로, MAC/Accumulator/Postprocess 및 Reset Wrapper는 변경하지 않는다. Timer는 기존 PREP/RUN/DRAIN을 센다.
 
 ### 기존 3-stage MAC 확정 지연 (읽기 상승 에지 R 기준)
 
@@ -186,7 +177,7 @@ Opcode/Encoding/GPR/CSR 선행 검사를 유지한 뒤, ARG_SRC Alignment(0x05) 
 | `gemm_controller` | counters, FSM, pipeline tags | 1 GEMM 실행, MAC Read/Write 스케줄, done |
 | `argmax_engine` | index, read/compare phase | 가변 1~10 signed INT8 비교, 결과 |
 
-Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. Phase 5에서 GEMM 원자적 Snapshot과 실행 전 설정 검증을 추가했다. ARGMAX Snapshot/검증도 17번 확정과 후속 구현 승인에 따라 Phase 6에서 구현·검증했다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 센다. Phase 3의 npu_top은 실제 Block Transfer LOAD active를 연결하며 GEMM active는 Phase 5의 실제 Engine 실행 PREP~최종 Write에 연결한다. 별도 TB의 기존 테스트용 activity 입력은 유지한다. 신규 npu_memory_wrapper는 기존 single_port_bram 7개를 같은 깊이와 1clk read로 재사용하고 XFER/GEMM/ARGMAX 포트를 분리한다. 새 output data register는 없으며 GEMM은 Phase 5에서 연결했으며 ARGMAX 엔진도 Phase 6에서 기존 ARGMAX 포트에 연결했다. 외부 DMEM은 byte address의 32bit Single-Port 고정 동기 read이고, read R 수락 → R+1 capture → R+2 write로 직렬 전송한다.
+Phase 2 구현: CSR file은 access_en/write_request로 주소·권한을 확인하고 별도 commit_en에서만 원본 32bit를 저장한다. Phase 5에서 GEMM Snapshot/검증을 추가했으며, 최신 21번 결정에 따라 Snapshot은 보존하고 GEMM 하드웨어 검증은 제거했다. ARGMAX Snapshot/검증도 17번 확정과 후속 구현 승인에 따라 Phase 6에서 구현·검증했다. PERF/STATUS/ERROR CSR은 live read다. Timer는 load_engine_active/gemm_engine_active 두 qualified 입력의 OR만 센다. Phase 3의 npu_top은 실제 Block Transfer LOAD active를 연결하며 GEMM active는 Phase 5의 실제 Engine 실행 PREP~최종 Write에 연결한다. 별도 TB의 기존 테스트용 activity 입력은 유지한다. 신규 npu_memory_wrapper는 기존 single_port_bram 7개를 같은 깊이와 1clk read로 재사용하고 XFER/GEMM/ARGMAX 포트를 분리한다. 새 output data register는 없으며 GEMM은 Phase 5에서 연결했으며 ARGMAX 엔진도 Phase 6에서 기존 ARGMAX 포트에 연결했다. 외부 DMEM은 byte address의 32bit Single-Port 고정 동기 read이고, read R 수락 → R+1 capture → R+2 write로 직렬 전송한다.
 
 Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산하여 정렬 → 산술 wrap → Region → 용량 Bounds를 검사한다. MEM_REQ에서 Scalar 요청, XFER_WAIT에서 기존 Block Transfer 요청을 조합 선택한다. 응답 저장소나 외부 포트/프로토콜을 추가하지 않는다. LW는 read 수락 R 다음 R+1에 GPR writeback/PC 전진하며, SW는 write R 후 R+1에 완료한다. 대기 중 다음 Fetch/GPR/CSR 갱신은 차단한다. 기존 7개 SRAM/Wrapper 및 Block Transfer RTL은 보존했다.
 
@@ -195,11 +186,11 @@ Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산
 `IDLE → FETCH_REQ → FETCH_WAIT/DECODE → (SCALAR_EXEC / CSR_EXEC / XFER_WAIT / GEMM_WAIT / ARGMAX_WAIT / SYSTEM_EXEC) → COMMIT_PC → FETCH_REQ`, 별도 `HALTED`/`FAULT_HALT`.
 
 - Read Request를 수락한 에지와 명령어 register에 안전하게 capture하는 에지를 분리.
-- NPU 장기 명령에는 검증 성공 뒤 `start`를 1회만 내보낸다. 쓰기 엔진의 내부 `done`은 최종 Write 이후, 읽기 전용 ARGMAX의 `argmax_done`은 최종 비교 결과가 안정된 뒤 1회만 발생한다. Top `done`은 END 전용이다.
+- GEMM은 소프트웨어 전제 및 하드웨어 next-PC 검사 후, 다른 NPU 장기 명령은 기존 하드웨어 검증 성공 뒤 `start`를 1회만 내보낸다. 쓰기 엔진의 내부 `done`은 최종 Write 이후, 읽기 전용 ARGMAX의 `argmax_done`은 최종 비교 결과가 안정된 뒤 1회만 발생한다. Top `done`은 END 전용이다.
 - scalar `LW`는 외부 DMEM read 응답 뒤 `rd` Writeback; `SW`는 write 수락 에지 이후 완료 처리.
 - 대기 상태에 있는 동안 중복 start, PC 전진, GPR/CSR writeback 금지.
 
-## 7. 파일별 기존 RTL 활용 계획
+## 7. 파일별 기존 RTL 활용 초기 계획 (이력; 현재 GEMM은 4절/21번)
 
 | 현재 파일/그룹 | 초기 구현 판단 | 이유 |
 |---|---|---|
@@ -242,7 +233,7 @@ Phase 8의 실제 OOC Netlist는 BUFG/MMCM/PLL이 0개이고 clk 경계 지연�
 
 ## 메모리/next-PC Fault 우선순위 후속 통합 (2026-11-24)
 
-Phase 5 보존 커밋 5be9059 이후 별도 브랜치에서 수행한다. Controller의 공통 병합 함수로 GEMM/Scalar/Block 모두 Alignment → Region → Bounds → Config를 적용한다.
+Phase 5 보존 커밋 5be9059 이후 별도 브랜치에서 수행한다. 당시 Controller의 공통 병합 함수로 GEMM/Scalar/Block 모두 Alignment → Region → Bounds → Config를 적용한다.
 LW/SW는 EXECUTE에서 데이터와 next-PC 오류를 병합하므로 정상 요청/응답 및 Fault 타이밍을 유지한다.
 Block은 EXECUTE에서 src/dst/next-PC 검사를 래치하고 XFER_ARGS에서 rs3 길이를 읽어 전체 범위를 검사한다. 성공한 경우에만 기존 Engine을 같은 에지에 시작한다.
 실패하면 Engine을 시작하지 않고 XFER_REJECT를 거쳐 Error Halt한다. 정상 Block의 첫 요청/Read/Write/완료/Timer 일정은 유지하며, next-PC 오류인 Block의 Halt 판정은 길이 수집 뒤 Fetch 기준 age=4다.

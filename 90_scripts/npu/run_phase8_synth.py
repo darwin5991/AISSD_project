@@ -1,4 +1,4 @@
-"""Phase 8 first synthesis only: unchanged npu_top and SRAM RTL, no IP generation."""
+"""Phase 8 synthesis: current NPU sources, unchanged SRAM/reset/constraints, no IP generation."""
 from datetime import datetime,timezone
 from pathlib import Path
 import ast
@@ -35,7 +35,7 @@ def main():
     all_rtl={p.relative_to(ROOT).as_posix():sha(p) for p in (ROOT/"04_rtl").rglob("*.sv")}
     old_project=ROOT/"99_build/vivado_mlp_top_ooc/mlp_top_ooc.xpr"
     guard={str(old_project):sha(old_project),str(ROOT/"06_fpga/constraints/mlp_top_ooc.xdc"):sha(ROOT/"06_fpga/constraints/mlp_top_ooc.xdc")}
-    manifest=dict(phase=8,stage="fpga_reset_wrapper_synthesis" if wrapper else "first_unchanged_rtl_synthesis",
+    manifest=dict(phase=8,stage="legacy_gemm_reuse_fpga_synthesis" if wrapper else "legacy_gemm_reuse_synthesis",
         head=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),
         branch=subprocess.check_output(["git","branch","--show-current"],cwd=ROOT,text=True).strip(),
         part="xc7a100tcsg324-1",top=top,clock_period_ns=10,

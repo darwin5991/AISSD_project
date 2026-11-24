@@ -45,7 +45,10 @@ def main():
     parser.add_argument("--vivado-bin",type=Path)
     parser.add_argument("--debug-only",action="store_true")
     parser.add_argument("--case",help="One named directed scenario with debug waveform")
+    parser.add_argument("--normal-only",action="store_true",help="Trusted GEMM contract; exclude removed hardware GEMM faults")
+    parser.add_argument("--reuse-gate",choices=("g2","g3"),help="Phase 8 Legacy reuse gate (normal configurations)")
     args=parser.parse_args()
+    if args.reuse_gate:args.normal_only=True
     run_id="npu_phase5_"+datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%fZ")
     out=ROOT/"07_runs"/run_id;out.mkdir(parents=True,exist_ok=False)
     build=ROOT/"99_build"/run_id;build.mkdir(parents=True,exist_ok=False)
@@ -61,7 +64,7 @@ def main():
         names=RTL+["05_tb/npu/tb_npu_phase5.sv","90_scripts/npu/run_phase1.py",
             "90_scripts/npu/run_phase5.py","90_scripts/npu/phase5_vectors.py",
             "90_scripts/npu/phase4_vectors.py","90_scripts/npu/phase3_vectors.py",
-            "90_scripts/npu/phase2_vectors.py","90_scripts/run.py"]
+            "90_scripts/npu/phase2_vectors.py","90_scripts/run.py","90_scripts/npu/gemm_config.py"]
         names += [p.relative_to(ROOT).as_posix() for p in (ROOT/"03_model/golden").glob("*.py")]
         for name in names:
             p=snap/name;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(ROOT/name,p)
@@ -73,9 +76,16 @@ def main():
         jobs=[("debug",16384,False,True)]
         if not args.debug_only:jobs += [("1048576",1048576,True,False),("16777216",16777216,False,False)]
         if args.case:jobs=[("debug",1048576,True,True)]
+        selected_names=None
+        if args.reuse_gate=="g2":
+            jobs=[("g2",1048576,True,False)]
+            selected_names=["k8_n4_dir0_boundary1","k12_n5_dir1_boundary1",
+                            "k16_n10_dir0_boundary1","k32_n512_dir1_boundary1"]
+        metrics["contract"]="trusted_normal_gemm" if args.normal_only else "historical_fault_contract"
+        metrics["reuse_gate"]=args.reuse_gate
         metrics["selected_case"]=args.case
         for name,capacity,full,debug in jobs:
-            data=out/"data"/name;listing=vectors.generate(data,capacity,full,debug,case_name=args.case)
+            data=out/"data"/name;listing=vectors.generate(data,capacity,full,debug,case_name=args.case,normal_only=args.normal_only,case_names=selected_names)
             print("[DATA] "+name+" "+str(len(listing))+" cases",flush=True)
             work=build/name;work.mkdir();logs=out/"logs"/name;logs.mkdir(parents=True)
             simargs=["phase5_sim","-onerror","quit","-onfinish","quit",
@@ -84,7 +94,8 @@ def main():
                 signals=["clk","rst_n","imem_en","imem_addr","dmem_en","dmem_we",
                     "u_dut/gemm_start","u_dut/gemm_active","u_dut/gemm_done","u_dut/gemm_we",
                     "u_dut/u_gemm/u_control/state","u_dut/u_gemm/u_control/read_issue",
-                    "u_dut/u_gemm/u_control/input_word","u_dut/u_gemm/u_control/output_group",
+                    "u_dut/u_gemm/u_control/input_word","u_dut/u_gemm/u_control/output_group","u_dut/u_gemm/u_control/weight_cursor",
+                    "u_dut/u_gemm/u_control/ram_address","u_dut/gemm_en",
                     "u_dut/u_gemm/mac_input_valid","u_dut/u_gemm/bias_load",
                     "u_dut/u_gemm/result_load","u_dut/u_gemm/u_accumulator/psum_valid",
                     "u_dut/u_gemm/u_bias/word_in"]
@@ -113,7 +124,7 @@ def main():
                   "events":wanted[3],"controls":wanted[4],"numeric":wanted[5],
                   "rtl_checks":int(found[0][6]),"python_checks":python_checks,
                   "legacy_words":sum(x["legacy_words"] for x in listing),"status":"PASS"}
-            if full and not args.case:
+            if full and not args.case and args.reuse_gate!="g2":
                 boundaries=[c for c in listing if c["name"].startswith("k") and "_boundary1" in c["name"]]
                 assert len(boundaries)==72 and all(c["error"]==0 for c in boundaries)
                 metrics["k_boundary_cases"]=len(boundaries)
@@ -121,7 +132,7 @@ def main():
             if debug:assert (out/"timing.vcd").stat().st_size and (out/"timing.wdb").stat().st_size
             metrics["profiles"].append(item)
             print("[PASS] "+name+" "+json.dumps(item),flush=True)
-        metrics.update(status="PASS",reason="GEMM timing/INT32/Snapshot/Fault and Python observed dump comparisons complete")
+        metrics.update(status="PASS",reason=("Normal GEMM timing/INT32/Snapshot/Timer, preserved next-PC check and observed dumps complete; removed GEMM faults excluded" if args.normal_only else "Historical GEMM checks complete"))
         code=0
     except (OSError,ValueError,AssertionError,RuntimeError,KeyError) as error:
         metrics["reason"]=str(error);print("[ERROR] "+str(error),flush=True)

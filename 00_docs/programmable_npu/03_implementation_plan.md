@@ -1,10 +1,12 @@
 # Programmable NPU v1.0 — Codex 구현 계획
 
+> **Phase 8 후속 최신 계약(2026-11-24):** GEMM은 소프트웨어에서 검증한 정상 설정을 전제로 한다. GEMM 하드웨어의 설정/Region/Bounds/Runtime 오류 검사는 제거했다. 원본 Snapshot, next-PC, 다른 명령어의 오류 처리와 SRAM/MAC/Timer 계약은 유지한다. [21번 결정](21_phase8_legacy_gemm_decisions.md)과 [22번 구현 보고서](22_phase8_legacy_gemm_report.md)가 이전 GEMM Fault 서술보다 우선한다.
+
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
 **목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행(Phase 5/6 이력):** Phase 4를 6efeec4에 보존한 뒤 사용자 승인에 따라 Phase 5 GEMM 구현·검증을 완료했다. [Phase 5 결과](15_phase5_report.md)의 Gate PASS와 정식 지원 하한 K=8 확정을 기록한다. Phase 6도 후속 승인에 따라 독립 ARGMAX 구현·검증 Gate PASS다. [18번 결과](18_phase6_report.md)를 따르며 당시 후속 Phase는 별도 승인 대상이었고, 현재 상태는 아래 후속 요약을 따른다.
 
-**현재 후속 상태:** Phase 7은 94bb214에 보존했다. 새 Phase 8 브랜치에서 Direct BRAM 합성·배치배선과 기능 회귀를 완료했으며 Timing Gate는 FAIL이다. 아래 Phase 8과 20번 보고서를 따른다. 10,000장은 보류한다.
+**현재 후속 상태:** Phase 8 Legacy GEMM 재사용을 승인받아 G0~G5 기능/200장/회귀 PASS, 동일 10ns 합성·배치배선 완료다. WNS -4.097ns로 개선됐으나 Timing Gate FAIL이다. [21번 결정](21_phase8_legacy_gemm_decisions.md)과 [22번 결과](22_phase8_legacy_gemm_report.md)를 따르며 추가 변경은 승인 대기다. 10,000장 보류.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -183,7 +185,7 @@ G2/G3/G4는 동일한 111word/444byte 코드 구조다. 100/200장의 기계어 
 
 의존성 확인 중 읽기 전용 샌드박스의 임시 디렉터리 제한이 발생했고 승인된 권한에서 같은 aissd import가 성공했다. 패키지 설치·환경 변경이나 RTL 수정은 없었다. 기능/Golden/시뮬레이션 실패·timeout은 없었다. Phase 7 당시 커밋·Push와 10,000장·Phase 8은 수행하지 않았다. 이후 Phase 7을 94bb214에 보존했고, 별도 승인된 Phase 8 결과는 아래와 20번 보고서를 따른다.
 
-## Phase 8 — Direct RTL BRAM Inference / OOC Synthesis & Implementation
+## Phase 8 초기 실행 이력 — Direct RTL BRAM Inference / OOC Synthesis & Implementation
 
 **현재 상태: Timing Gate FAIL / 후속 승인 대기.** 기존 BMEM IP 전환 계획은 최신 사용자 승인에 따라 직접 RTL 추론 방식으로 대체한다. BMG IP/.xci를 만들지 않는다. 10,000장 정확도 검증은 보류하며 Phase 7 G0~G4의 기준선과 커밋 94bb214를 보존한다.
 
@@ -243,3 +245,9 @@ Phase 5를 5be9059에 먼저 보존한 뒤 fix/memory-fault-priority-20261124에
 Phase 1~5, Python 및 Legacy RTL 5종 회귀가 완료되어야 한다. 보고서·수정은 Phase 5와 별도 커밋으로 관리한다. Phase 6은 승인 범위가 아니다.
 
 최종 후속 Gate는 **PASS**다. 필수 복합 오류 32사례(armed/unarmed), 기본 16MiB 16사례, 추가 Fault 및 Phase 1~5·Python 27개·Legacy 5종 회귀를 통과했다. 변경·타이밍·재현 로그는 [16번 후속 보고서](16_memory_fault_priority_report.md)를 참조한다. 이 메모리 후속 작업 당시 Phase 6은 승인 대기였으며, 이후 별도 승인으로 완료한 Phase 6 결과는 [18번 보고서](18_phase6_report.md)를 따른다.
+
+## 현재 Phase 8 후속 — 승인된 Legacy GEMM 재사용
+
+21번 결정에 따라 gemm_controller 한 개를 최소 Adapter/FSM으로 바꾸고 기존 Pipeline/Counter를 인스턴스화한다. GEMM 검사만 제거하고 다른 명령어/next-PC/Datapath/SRAM/Reset은 유지한다. 공통 Compile Source List와 동일 FPGA Flow 의존성을 연결하고, 소프트웨어 생성기에서 완전한 GEMM 설정을 검사한다.
+
+G0~G5 기능 Gate는 새 실행 로그에서 PASS다. G6 동일 10ns 합성/BRAM/Netlist/배치배선은 완료했으며 WNS -4.097ns로 Timing Gate FAIL이다. 22번 보고서를 따른다. 위 Phase 5~8 원래 계획/보고는 당시 이력이며 제거한 GEMM Fault를 현재 보장으로 해석하지 않는다. Commit/Push/10,000장과 미승인 후속 구조 변경은 하지 않는다.

@@ -1,5 +1,7 @@
 # Programmable NPU ISA v1.0 — 최종 기능 명세
 
+> **Phase 8 후속 최신 계약(2026-11-24):** GEMM은 소프트웨어에서 검증한 정상 설정을 전제로 한다. GEMM 하드웨어의 설정/Region/Bounds/Runtime 오류 검사는 제거했다. 원본 Snapshot, next-PC, 다른 명령어의 오류 처리와 SRAM/MAC/Timer 계약은 유지한다. [21번 결정](21_phase8_legacy_gemm_decisions.md)과 [22번 구현 보고서](22_phase8_legacy_gemm_report.md)가 이전 GEMM Fault 서술보다 우선한다.
+
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
 **상태:** 구현 기준 명세 (RTL/Assembler 구현 및 시뮬레이션은 별도). **대상:** 기존 INT8 MLP 가속기의 명령어 구동 확장. **명령어 길이:** 항상 32bit. **Endian:** 메모리의 32bit 워드는 little-endian 바이트 순서 (`byte0` = `[7:0]`). **PC:** 32bit byte address, Reset 후 `0x0000_0000`.
@@ -72,7 +74,7 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 ```
 
 - 형식: `SETI csr, signed_immediate`, immediate 범위 `[-4096,4095]`; `CSR[csr] ← sign_extend_32(imm13)`.
-- 없는 CSR/Read-Only CSR 쓰기/불법 형식은 해당 명령에서 즉시 Fault. 존재하는 RW 설정 CSR은 SETI/CSRW의 32bit 원본 값을 그대로 저장하고, 값 범위·조합·SRAM 주소/크기는 해당 EXEC 수락 시 snapshot 전체로 검증한다. 중간 설정값에 대한 조기 Fault는 금지한다 (D-01).
+- 없는 CSR/Read-Only CSR 쓰기/불법 형식은 해당 명령에서 즉시 Fault. 존재하는 RW 설정 CSR은 SETI/CSRW의 32bit 원본 값을 그대로 저장하고, ARGMAX 값 범위·조합·SRAM 주소/크기는 EXEC Snapshot으로 검증한다. GEMM은 21번 결정에 따라 소프트웨어에서 설정을 검사하고 하드웨어에는 원본 Snapshot을 전달한다. 중간 설정값에 대한 조기 Fault는 금지한다 (D-01).
 
 ### 3.3 NPU 전용 공통 포맷 (Custom-1)
 
@@ -143,21 +145,20 @@ R/I/S/B/U/J의 실제 Immediate 비트 스플릿은 RISC-V 공식 인코딩과 �
 
 `XFER_SRC`, `XFER_DST`, `XFER_LEN` CSR은 **존재하지 않음**. CSR 외부 하드웨어 MMIO 공간은 v1 미지원.
 
-## 5. GEMM의 유효 구성/레이아웃
+## 5. GEMM의 유효 구성/레이아웃 — 소프트웨어 검증 프로파일
 
-[Phase 5 사용자 확정](14_phase5_decisions.md): INT32 누산과 기존 Bias 정렬은 32bit 결과를 남기고 2의 보수 signed로 해석한다. 산술 Overflow는 Fault가 아니며 Output INT8 Saturation은 기존대로 적용한다. 설정 원본 32bit를 검증하기 전에 필드를 축소하지 않는다.
-GEMM 역할과 다른 Bank는 INVALID_REGION, 같은 SRC0/DST Buffer는 INVALID_CONFIG다. 메모리/설정 오류는 Alignment → Region → Bounds → Config 순서다. K=4의 Config 오류도 이 우선순위를 따른다.
-Phase 5 실제 검증에서 K=8/12/16/32와 출력 그룹·연속 실행이 PASS했고, 2026-11-24 사용자 후속 승인으로 최소 K=8을 정식 지원 하한으로 확정했다. [Phase 5 결과](15_phase5_report.md)를 따른다. GEMM의 next-PC Bounds와 설정 오류가 겹쳐도 Alignment → Region → Bounds → Config로 병합한다.
+[21번 최신 결정](21_phase8_legacy_gemm_decisions.md)을 적용한다. GEMM 설정/Region/Bounds/Runtime Fault 보장은 제거했으며 아래 조건은 소프트웨어 프로그램 생성의 전제다. 잘못된 설정의 하드웨어 동작은 보장하지 않는다. 15번의 Fault PASS는 이전 구조의 이력이다.
 
-
-- `EXEC GEMM` 한 번은 **하나의 FC 레이어(M=1)** 실행. 기존 MAC 4x4, INT8×INT8→signed32, 4-lane 누산·Bias·ReLU/Shift/Saturate 경로를 그대로 사용.
-- D-02: 초기 버전은 짧은 K용 bias staging을 추가하지 않는다. K=4는 선행 오류가 없으면 EXEC 수락 시 INVALID_CONFIG Fault이며 GEMM start/SRAM write를 금지한다. 최소 지원 K=8은 Phase 5의 K=8/12/16/32 경계 분석·directed simulation PASS 후 사용자 승인으로 확정했다. 기존 FC K=128/512/784의 새 ISA 통합 결과는 Phase 5 보고서의 실제 PASS 범위를 따른다.
-- `K_words = K/4`, `output_groups = ceil(N/4)`; 출력 저장 워드 개수는 `output_groups`. 마지막 그룹의 N을 초과하는 lane은 0으로 패딩된 데이터로 취급하며 모델 packer가 해당 Weight/Bias를 0으로 채움. N 개 유효 출력 외의 lane은 정확도/ARGMAX 평가 대상이 아님.
-- `SRC0_BASE`: Buffer A 또는 B, `DST_BASE`: **반대쪽 Buffer**. 입력·출력은 동일 단일 포트 Buffer에 동시에 배치할 수 없음.
-- `SRC1_BASE`: **Weight Bank 0의 논리 창 주소**. 물리 Weight Bank 0..3은 그 **동일 word offset**을 병렬 Read. Weight는 `출력 그룹 → K_words` 순서, 각 은행에 4개의 output lane별 INT8 × input 4개를 한 워드에 배치.
-- `BIAS_BASE`: Bias SRAM에서 각 출력 그룹당 32bit packed signed INT8 ×4를 읽음.
-- 모든 주소는 4byte 정렬, 계산한 마지막 접근까지 해당 물리 메모리 깊이를 넘지 않아야 함. `K_words`와 `output_groups`는 기존 주소/카운터 폭과 Buffer 용량을 만족해야 함. K 입력을 읽는 SRAM의 실제 깊이, 출력 SRAM 깊이, 29280 Weight 워드와 163 Bias 워드를 모두 사전 검사.
-- `BIAS_SHIFT`, `OUT_SHIFT`, `ACT_MODE`는 명령 수락 시 고정. 기존 pipeline의 BRAM read(R) → MAC 입력 R+1 → product R+2 → sum R+3 → accumulate R+4 → result R+5 → write R+6를 보존.
+- EXEC GEMM 한 번은 FC 레이어 한 개(M=1)를 실행한다. N=1~512, K>=8이고 4의 배수다. K=4는 프로그램 생성 단계에서 거부한다.
+- SRC0는 A/B 입력, DST는 반대 Buffer다. SRC1은 W0 논리 창의 Base이며 W0~W3의 동일 Word Offset을 병렬로 읽는다. BIAS는 Bias SRAM이다.
+- 모든 Base는 4byte 정렬이며 Input K bytes, Weight 각 Bank K*ceil(N/4) bytes, Output/Bias 각 4*ceil(N/4) bytes가 실제 깊이 안에 있어야 한다. Python 전체 정수로 시작/끝 주소와 역할을 검사한다.
+- 원본 CSR 10개는 명령 수락 에지에 원자적으로 Snapshot한다. CSR 저장 시 원본 32bit를 유지하며 중간 설정값에 조기 Fault하지 않는다.
+- input_words=K/4, output_groups=ceil(N/4)다. 마지막 그룹의 N 초과 lane Weight/Bias는 packer가 0으로 채우고 유효 N개 외는 평가하지 않는다.
+- 실행은 Legacy pipeline_control/read_issue_control/counter_en을 재사용한다. Input=Base+입력 Counter, Weight=Read마다 증가하는 Cursor, Bias=Base+Group, Output=Base+6단 지연 Group이다. A의 128 이상 Output Word도 유지한다.
+- Bias Shift는 signed -32~31, Output Shift 0~31, ACT 0/1이다. INT32 누산/Bias 정렬의 wrap, ReLU/산술 Shift/INT8 Saturation은 기존대로다.
+- Read R, MAC 입력 R+1, 곱 R+2, 부분합 R+3, 누산 R+4, Result/후속 Bias R+5, Output Write R+6 및 그룹 공백 1cycle을 유지한다.
+- Hardware config_error/error_code는 ERR_OK, fault는 0이다. PC/next-PC/인코딩/CSR 권한 검사와 다른 명령어의 오류 처리는 유지한다.
+- 기존 Opcode/CSR/외부 포트 변경, 자동 ARGMAX, M>1 또는 K=4 지원은 없다.
 
 기존 MNIST 사용 예시:
 
@@ -217,14 +218,15 @@ Alignment 검사 후 A/B 논리 창·source 역할을 검사한다. Weight/Bias 
 | `0x04` | `INVALID_REGION` | 미지원 메모리 영역, LOAD/STORE 방향 오류 |
 | `0x05` | `MISALIGNED` | PC/주소/길이 정렬 위반 |
 | `0x06` | `MEMORY_BOUNDS` | 실물 SRAM 깊이, IMEM/DMEM 배정 크기 초과, 범위 wrap |
-| `0x07` | `INVALID_CONFIG` | GEMM/ARGMAX 지원 범위 위반, Length 0 |
+| `0x07` | `INVALID_CONFIG` | ARGMAX 지원 범위 위반, Block Length 0 (GEMM 설정은 SW 검사) |
 | `0x08` | `ILLEGAL_ENCODING` | 예약 funct3/funct7/필드 조합 |
 
 - **오류 감지 후** `ERROR_CODE` 설정, `STATUS=2`, `fault=1`(Halt 동안 유지), `busy=0`, 이후 메모리 write/엔진 start 불허. `END`면 `STATUS=1`, `done` **1클럭 펄스**, Halt 유지. Reset만 Halt 해제.
 - 주소/길이/구성 오류는 **명령 실행 시작 전 가능한 한 검증**하여 부분 부작용을 줄임. 검증되지 않은 런타임 Fault에서 이미 쓰인 메모리의 rollback은 보장하지 않음.
 - 동일 사이클 여러 오류 가능 시 우선순위: Opcode/Encoding → GPR/CSR → Alignment → Region → Bounds → Config. 첫 오류 코드만 sticky 기록.
 
-2026-11-24 별도 후속 승인 및 [17번 P6-D-01](17_phase6_decisions.md): LW/SW, Block LOAD/STORE, GEMM 및 ARGMAX는 데이터 오류와 선택된 next-PC Bounds를 명령 시작 전에 함께 판단한다. Alignment(0x05) → Region(0x04) → 데이터/next-PC Memory Bounds(0x06) → Configuration(0x07) 순서로 병합한다. 정상 데이터 주소라도 next-PC가 범위 밖이면 요청을 발행하지 않는다. Opcode/Encoding/GPR/CSR 선행 검사는 유지한다.
+2026-11-24 별도 후속 승인 및 [17번 P6-D-01](17_phase6_decisions.md): LW/SW, Block LOAD/STORE 및 ARGMAX는 데이터 오류와 선택된 next-PC Bounds를 명령 시작 전에 함께 판단한다. Alignment(0x05) → Region(0x04) → 데이터/next-PC Memory Bounds(0x06) → Configuration(0x07) 순서로 병합한다. 정상 데이터 주소라도 next-PC가 범위 밖이면 요청을 발행하지 않는다. Opcode/Encoding/GPR/CSR 선행 검사는 유지한다.
+GEMM은 설정 오류 병합을 하지 않으며 기존 next-PC/명령어 검사만 하드웨어에서 유지한다.
 Block은 길이 GPR까지 수집한 뒤 전체 사전 검사를 통과한 경우에만 Engine start를 허용한다. 사전 Fault는 DMEM/SRAM 접근·GPR writeback·LOAD active를 발생시키지 않는다. Scalar의 확장 주소 산술 wrap 규칙은 12번 결정을 유지한다.
 
 - Reset 시 `STATUS=0`, `ERROR_CODE=0`, `fault=0`, `done=0`.

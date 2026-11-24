@@ -368,15 +368,25 @@ def interpret(image,initial,capacity,inject_pc):
         pc=next_pc
     raise ValueError("reference did not halt")
 
-def generate(directory,capacity,full,debug=False,case_name=None):
+def generate(directory,capacity,full,debug=False,case_name=None,normal_only=False,case_names=None):
     directory.mkdir(parents=True,exist_ok=False)
     listing=[]
     selected=fixtures(capacity,full,debug and case_name is None)
+    if normal_only:
+        selected=[c for c in selected if c[3]!=2 and not c[0].startswith(("fault_","encoding_","last_imem_priority_"))]
+    if case_names is not None:
+        selected=[c for c in selected if c[0] in case_names]
+        assert {c[0] for c in selected}==set(case_names),"missing selected normal cases"
     if case_name:
         selected=[c for c in selected if c[0]==case_name]
         assert len(selected)==1,("unknown scenario",case_name)
     for i,(name,image,initial,hook,legacy_expected) in enumerate(selected):
         trace,bus,memory,controls,numeric=interpret(image,initial,capacity,hook)
+        if normal_only:
+            from gemm_config import validate_gemm_config
+            for row in trace:
+                if row[1]==GEMM:
+                    validate_gemm_config(row[13:23])
         for address,expected in legacy_expected.items():
             assert [memory[address+4*j] for j in range(len(expected))]==expected,("legacy layer mismatch",name)
         (directory/f"case_{i}.imem.hex").write_text("".join(f"@{a:08x}\n{w:08x}\n" for a,w in sorted(image.items())),encoding="ascii")

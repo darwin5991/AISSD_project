@@ -1,8 +1,12 @@
 # Programmable NPU v1.0 — 문서 색인
 
-> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1~6 Scalar/CSR/Timer/Block/SRAM/GEMM/ARGMAX 구현·검증 PASS / 최소 K=8 확정 / 메모리·PC 복합 Fault 후속 Gate PASS / Phase 6 D-01/D-02 적용·Gate PASS / Phase 7 첫 1/5/100/200장 Application 검증 PASS / Phase 8 Direct BRAM 합성·배치배선 완료 / Timing Gate FAIL / 후속 승인 대기 / 10,000장 보류**
+> 기준일: 2026-11-24 · 현재 상태: **Phase 8 Legacy GEMM 재사용 구현·기능·첫 200장·선택 회귀 PASS / BRAM 보존 / 합성·배치배선 완료 / 100MHz OOC Timing FAIL(WNS -4.097ns, 이전 -7.202ns) / 후속 설계 변경 승인 대기 / 10,000장 보류**
 >
 > 기존 `00_docs/architecture.md`는 **고정 3-Layer MLP 베이스라인**을 설명한다. 이 디렉터리는 그 RTL을 **명령어 구동 NPU**로 확장하기 위한 새로운 구현 계약이다. 기존 성능/정확도 수치를 새 설계의 검증 결과로 인용하지 않는다.
+
+## 최신 Phase 8 후속
+
+G0~G5 기능 Gate PASS, G6 합성·배치배선 완료 및 Timing FAIL. WNS는 -7.202ns에서 -4.097ns로 개선됐다. GEMM의 정상 프로그램 전제·소프트웨어 검사와 Legacy 실행 제어 재사용은 [21번 결정](21_phase8_legacy_gemm_decisions.md), 실제 결과·재현 명령은 [22번 보고서](22_phase8_legacy_gemm_report.md)를 따른다. 아래 기존 Phase 8 Timing FAIL은 변경 전 이력이다.
 
 ## 문서 순서
 
@@ -26,6 +30,9 @@
 18. [18_phase6_report.md](18_phase6_report.md): 독립 ARGMAX/Snapshot/Fault/Timer/실파형·전체 회귀 PASS (후속 보존 커밋 4d4cd43)
 19. [19_phase7_report.md](19_phase7_report.md): RTL 변경 없이 첫 1/5/100/200장 연속 추론·Golden·정확도·전체 회귀 PASS
 20. [20_phase8_report.md](20_phase8_report.md): 직접 BRAM 추론·FPGA Reset·100MHz OOC 합성/배치배선·회귀 및 Timing 판정
+
+21. [21_phase8_legacy_gemm_decisions.md](21_phase8_legacy_gemm_decisions.md): 최신 GEMM 정상 프로그램 계약과 Legacy 재사용 결정
+22. [22_phase8_legacy_gemm_report.md](22_phase8_legacy_gemm_report.md): 구현·기능·200장·회귀·동일 100MHz Timing 결과
 
 ## 이번에 최종 확정한 선택
 
