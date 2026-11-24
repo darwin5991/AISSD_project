@@ -56,7 +56,7 @@ def dma(build):
             'LOAD x1,x2,x3','ADDI x1,x2,0',f'ADDI x2,x6,{len(e)*4}','STORE x1,x2,x3','TSTOP','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+count)*4}(x6)']
         e+=pattern+[2*(count+2)]
     a+=['END'];return run_case('dma','\n'.join(a),e,data,build)
-def gemm(build):
+def gemm(build,integrated=False):
     import numpy as np
     from reference import gemm as math_gemm
     from memory_builder import pack8,BANKS
@@ -77,9 +77,28 @@ def gemm(build):
               f'SETADDR BIAS_BASE,{BANKS["Bias"]+12}',f'SETADDR GEMM_DIM,{(1<<20)|(n<<10)|k}',f'SETI GEMM_CFG,{int(relu)*2048+os*64+(bs&63)}',
               'TSTART','EXEC GEMM','TSTOP',f'LI x1,{BANKS[dst]+oo}',f'ADDI x2,x6,{len(e)*4}',f'LI x3,{g*4}','STORE x1,x2,x3','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+g)*4}(x6)']
         e += [int(v) for v in pack8(yp)]+[g*(k//4)+g+6]
-    a+=['END'];return run_case('gemm','\n'.join(a),e,data,build)
+        if integrated:
+            a += [f'SETADDR ARG_SRC,{BANKS[dst]+oo}',f'SETI ARG_LEN,{min(n,10)}','TSTART','EXEC ARGMAX,x1',f'SW x1,{len(e)*4}(x6)',
+                  'TSTOP','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+1)*4}(x6)']
+            e += [int(np.argmax(yp[:min(n,10)])),0]
+    a+=['END'];return run_case('chain' if integrated else 'gemm','\n'.join(a),e,data,build)
+def argmax(build):
+    from memory_builder import pack8
+    a=['LI x6,0x10001000'];e=[];data={}
+    for i,(values,length,bank) in enumerate([([-128,127,127,0,126,-1,4,5,6,7,127,127],10,0x80000010),
+             ([-3,-2,-1,-1,-4,-5,-6,-7,-8,-9,127,127],10,0x80020020),([-128,127,127,127],1,0x80000000),
+             ([-5,-4,-3,-2,100,100,-1,0],5,0x80020004)]):
+        words=pack8(values);src=0x10000000+i*64
+        for j,w in enumerate(words):data[src+j*4]=int(w)
+        a += [f'LI x1,{src}',f'LI x2,{bank}',f'LI x3,{len(words)*4}','TSTART','LOAD x1,x2,x3','TSTOP',
+              f'SETADDR ARG_SRC,{bank}',f'SETI ARG_LEN,{length}','EXEC ARGMAX,x1',f'SW x1,{len(e)*4}(x6)',
+              'CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+1)*4}(x6)','TSTART','EXEC ARGMAX,x1','TSTOP','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+2)*4}(x6)']
+        e += [values.index(max(values[:length])),len(words)+2,0]
+    a+=['END'];return run_case('argmax','\n'.join(a),e,data,build)
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('gate',choices=['scalar','dma','gemm']);p.add_argument('--build');args=p.parse_args()
-    mode={'scalar':False,'dma':'dma','gemm':True}[args.gate]
+    p=argparse.ArgumentParser();p.add_argument('gate',choices=['scalar','dma','gemm','argmax','all']);p.add_argument('--build');args=p.parse_args()
+    mode={'scalar':False,'dma':'dma'}.get(args.gate,True)
     b=Path(args.build) if args.build else compile_sim(ROOT/'99_build'/('npu_'+args.gate+'_'+uuid.uuid4().hex[:8]),mode)
-    {'scalar':scalar,'dma':dma,'gemm':gemm}[args.gate](b)
+    if args.gate=='all':
+        scalar(b);dma(b);gemm(b);argmax(b);gemm(b,True)
+    else: {'scalar':scalar,'dma':dma,'gemm':gemm,'argmax':argmax}[args.gate](b)

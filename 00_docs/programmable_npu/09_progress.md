@@ -58,3 +58,9 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - `conda run -n aissd python 90_scripts/npu/smoke.py gemm` exit 0; 8/8 external words exact over K=8/12, N=5/8/1, both ping-pong directions, signed random operands, positive/negative bias shifts, saturation/ReLU, padded lanes, nonzero input/W/bias/output bases. A output word190 exercises full 8-bit path.
 - GEMM timer observed through CSRR+SW equals G*Q+G+6 for all three cases (12,14,9). Results through STORE only. Evidence `07_runs/npu/gemm_913b7c97c7`; launcher `99_build/npu_m0/m4.log`. No arithmetic changes or result masks.
 - ARGMAX engine wired but NOT YET GATED; M5 next. Repairs unchanged 4; recovery 0.
+
+## M5 integrated smoke PASS / 2026-11-25
+- Anchor af16594. `conda run -n aissd python 90_scripts/npu/smoke.py all` exit 0; final full top compiled once, five programs, 77/77 external words exact: scalar19, DMA24, GEMM8, ARGMAX12, chain14.
+- `07_runs/npu/scalar_52cc5fe152`, `dma_9c0e67b2e2`, `gemm_9f3f342382`, `argmax_4105a01fb9`, `chain_3de93df10a`. Logs/source hashes under `99_build/npu_all_*`; launcher `99_build/npu_m0/m5.log`.
+- ARGMAX signed/ties/length1,5,10, both banks/nonzero offsets, padding ignored; timer retains DMA count across ARGMAX, TSTART clears count, ARGMAX/scalar excluded. DMA→GEMM→STORE→ARGMAX integrated on three small configurations. Timer overflow sticky wrap implemented and reviewed; no forced state/billion-cycle run.
+- All new validation uses external top buses and output memory only. Legacy leaf RTL byte-identical to baseline. No new failures; repairs4/recovery0. Next M6 V1 toolchain.
