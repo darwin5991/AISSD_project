@@ -31,6 +31,8 @@ def assemble(source):
             if not line: continue
         t=[x for x in re.split(r'[\s,()]+',line) if x]
         m=t[0].upper(); a=t[1:]
+        counts={'.EQU':2,'LI':2,'SETADDR':2,'LUI':2,'ADD':3,'ADDI':3,'AND':3,'ANDI':3,'OR':3,'ORI':3,'SLLI':3,'SRLI':3,'BEQ':3,'BNE':3,'JAL':2,'LW':3,'SW':3,'CSRW':2,'CSRR':2,'SETI':2,'LOAD':3,'STORE':3,'TSTART':0,'TSTOP':0,'END':0}
+        if m!='EXEC' and (m not in counts or len(a)!=counts[m]): raise ValueError('instruction operands '+line)
         if m=='.EQU':
             if a[0].upper() in symbols: raise ValueError('duplicate symbol')
             symbols[a[0].upper()]=val(a[1]); continue

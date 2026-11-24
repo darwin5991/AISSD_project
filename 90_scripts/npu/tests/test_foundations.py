@@ -50,5 +50,13 @@ class Foundations(unittest.TestCase):
             with np.load(target/'golden.npz',allow_pickle=False) as g:
                 for key in ('fc1','fc2','fc3'): np.testing.assert_array_equal(ref[key][row],g[key+'_output8'])
         print('baseline equality: IDs 0,1,7, all layers (1956 bytes), argmax',ref['argmax'].tolist())
+        # Prepare capacity/loop support only; no large accuracy simulation/reference.
+        large=Scenario('capacity_10000',list(range(10000)),['argmax']).validate()
+        inputs=dict(data,input=np.zeros((10000,784),dtype=np.int8),labels=np.zeros(10000,dtype=np.int32))
+        bulk,layout=build(large,inputs)
+        self.assertLess(bulk.nbytes,16*1024**2)
+        self.assertLess(len(assemble(assembly(large,layout))),128)
+        self.assertEqual(layout['dump']['words'],10000)
+        print('10000 capacity only:',bulk.nbytes,'bytes; no 1000/10000 inference run')
 
 if __name__=='__main__': unittest.main()
