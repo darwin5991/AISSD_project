@@ -21,16 +21,16 @@ The document author's original NOT RUN template is superseded by the observed ga
 | M7 V100 | PASS | b29c8d0 | 07_runs/npu/v100_20261125_024314_8859ab | 100/100 |
 | M7 V200 | PASS | 72f48a1 | 07_runs/npu/v200_20261125_024439_4aec3b | 200/200 |
 | M7 V200F | PASS | 72f48a1 | 07_runs/npu/v200f_20261125_024812_6bde90 | 2400 bytes+200 indices |
-| M8 synthesis | NOT RUN | — | — | |
+| M8 synthesis | PASS | e303caa+FPGA hashes | 99_build/npu_ooc_380ec37d39 | Synth WNS2.058ns; BRAM109.5/135 |
 | M9 post-route | NOT RUN | — | — | |
 | M10 power/report | NOT RUN | — | — | |
 
 ## Current checkpoint
 - Branch/base: npu-v2/20261125 / 2e89b8e994982094a36172a3fd2f65d4a9edaff7
-- Last passing milestone / commit: M7 V200F / 72f48a1
-- Current action: M8 actual OOC synthesis
+- Last passing milestone / commit: M8 synthesis / see M8 gate commit
+- Current action: M9 actual opt/place/route
 - Retry attempts used / recovery branches used: 4 tool-launch repairs / 0
-- Next gate: M8 synthesis
+- Next gate: M9 post-route
 - Blockers: none currently
 
 ## Log template
@@ -90,3 +90,10 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 ## M7 V200F PASS / 2026-11-25
 - Source72f48a1, unchanged RTL hashes. `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v200f.json --build 99_build/npu_model_8cf69d59` exit0. FC3 2400/2400 bytes including400 padding bytes; ARGMAX200/200; labels200/200 informational. Evidence `07_runs/npu/v200f_20261125_024812_6bde90`, `99_build/npu_m0/v200f.log`; per-tool args/exit0 recorded in build command JSON.
 - All mandatory functional gates PASS; no functional/reference mismatch or diagnostic rerun. Final RTL unchanged from af16594. No timing/power claim yet. Next M8 actual synth.
+
+## M8 synthesis PASS / 2026-11-25
+- Source e303caa plus exact precommit FPGA driver/Tcl/XDC hashes in `99_build/npu_ooc_380ec37d39/source_hashes.json`. `conda run -n aissd python 90_scripts/npu/build_fpga.py synth` exit0, bare NPU_SYNTH_COMPLETE, actual synth.dcp and all reports produced. Native Vivado2025.2 license acquired.
+- Synthesized npu_top, xc7a100tcsg324-1, OOC10ns, no exceptions. LUT5075/63400(8.00%), FF2180/126800(1.72%), RAMB36=104,RAMB18=11=>109.5/135tiles(81.11%); DSP0/240 (unchanged 8x8 multiply maps to LUTs under default synthesis). DistributedRAM0;11 LUT SRLs are pipeline metadata, not SRAM substitution. Hierarchy confirms all BRAM under u_memory; depths/decomposition retained.
+- Synthesis timing only: WNS2.058ns/TNS0, WHS0.214ns/THS0;7923 setup/hold endpoints. No_clock0, unconstrained_internal_endpoints0. Boundary no_input_delay66/no_output_delay101; clk HD.CLK_SRC not specified in OOC. NOT a post-route pass.
+- Synth DRC43 reported warnings, no errors: CFGBVS-1(1), CHECK-3(2 report limits), REQP-1839/1840(20 each, async reset/control into BRAM). Preserve required legacy async reset and report reset-release/IO scope; no suppressed warnings or invented board voltage. Benign unused inferred BRAM mux bits and EX/MEM wb_sel optimized; no latches.
+- Reviewed actual `synth_utilization.rpt`, `synth_utilization_hier.rpt`, `synth_timing_summary.rpt`, `synth_drc.rpt`, `synth_check_timing.rpt`, console. Launcher `99_build/npu_m0/m8.log`; tool command/exit JSON in build. Next M9 opt/place/phys_opt/route; no new repair.
