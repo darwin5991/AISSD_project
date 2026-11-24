@@ -23,14 +23,14 @@ The document author's original NOT RUN template is superseded by the observed ga
 | M7 V200F | PASS | 72f48a1 | 07_runs/npu/v200f_20261125_024812_6bde90 | 2400 bytes+200 indices |
 | M8 synthesis | PASS | e303caa+FPGA hashes | 99_build/npu_ooc_380ec37d39 | Synth WNS2.058ns; BRAM109.5/135 |
 | M9 post-route | PASS | 5086240 | 99_build/npu_ooc_380ec37d39/routed_gate.json | WNS0.312ns/WHS0.145ns; route7888/7888 |
-| M10 power/report | NOT RUN | — | — | |
+| M10 power/report | PASS | 0a94cce + final report commit | 99_build/npu_ooc_380ec37d39/routed_power.rpt; 10_final_report.md | 0.115W vectorless; final integrity PASS |
 
 ## Current checkpoint
 - Branch/base: npu-v2/20261125 / 2e89b8e994982094a36172a3fd2f65d4a9edaff7
-- Last passing milestone / commit: M9 post-route / see M9 gate commit
-- Current action: M10 power and final report
-- Retry attempts used / recovery branches used: 4 tool-launch repairs / 0
-- Next gate: M10 power/report
+- Last passing milestone / commit: M10 power/integrity / 0a94cce374539e78756e31cb910ab8553370dcc2
+- Current action: all required work complete; final report reviewed and committed at handoff
+- Retry attempts used / recovery branches used: 5 tooling repairs, 0 functional/timing repairs / 0
+- Next gate: none; 1000/10000 actual runs deferred to user
 - Blockers: none currently
 
 ## Log template
@@ -114,3 +114,7 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - Power LAST after functionality/route: total0.115W,dynamic0.026W,static0.089W; vectorless/default activity, no VCD/SAIF, confidenceMedium, typical commercial,ambient25C,junction25.5C,default250LFM/medium heatsink/medium12–15layerboard thermal model. Not measured board or workload energy; BRAM activity estimate<0.001W demonstrates default enable/activity limitation. No numeric power threshold.
 - `conda run -n aissd python 99_build/npu_m0/audit_final.py` exit0; `final_integrity.json` and `final_audit.log` in npu_m0. Immutable program/data/reference/output hashes checked; same six weight/bias hashes across all runs; checkpoint/test IDX unchanged;39 routed RTL hashes equal each of six functional builds/currentsource; preserved legacy arithmetic/BRAM byte-identical to baseline; main still2e89b8e. Total required checks6312 layer bytes+526 full uint32 indices,2104 output words,zero mismatch. All counts include repeated scenarios, not unique images (200 unique).
 - No functional/timing repairs, no reference edits, no recovery branches. Tooling repairs5 total (last is path normalization, only1 attempt for that blocker). Final report/document review and final tracked-clean commit next; no further optional experiments or large inference runs.
+
+## Final documentation and handoff / 2026-11-25
+- Final code0a94cce374539e78756e31cb910ab8553370dcc2; report-only commit follows. `10_final_report.md` filled from actual comparisons/reports/audit; contains all unit/scenario counts, real paths/commands/hashes, routed utilization/setup/hold/DRC/coverage caveats, vectorless power assumptions, repair history, and future1000/10000/debug commands.
+- All M0–M10 gates satisfied. Final code tree clean at0a94cce; document review, `git diff --check`, staged diff review and final tracked-clean status checked for handoff. No further experiments, RTL/data/reference/constraint changes or push. Main remains pinned baseline. Required functionality complete; remaining items only explicitly deferred scope recorded in10.
