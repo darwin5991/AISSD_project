@@ -41,3 +41,9 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - Command `conda run -n aissd python -m unittest discover -s 90_scripts/npu/tests -v`; Python exit 0, 4/4 unittest methods PASS. Evidence `99_build/npu_m0/m1_tests.log` (PowerShell formats unittest stderr but unittest result OK).
 - 24 encoding cases plus LI boundaries/label expansion, signed packing/wrap, layout; existing generate_golden.py IDs 0,1,7 all-layer equality 1956 bytes, predicted [7,2,9]. Baseline outputs `99_build/baseline_golden_515a0fa671`, `baseline_golden_51dab8755a`, `baseline_golden_c526978256`.
 - Source reviewed for independent reference and expected-value isolation. No model/data changes. Next M2; repairs 0.
+
+## M2 scalar IC PASS / 2026-11-25
+- Anchor 87a8b86; exact 9-state IC with IF/ID, ID/EX, EX/MEM, MEM/WB, low-3-bit GPR addressing, packed CSR storage, WB commits, timer. New external-memory-only TB; temporary scalar harness excluded from final synthesis.
+- `conda run -n aissd python 90_scripts/npu/smoke.py scalar --build 99_build/npu_scalar_573340c9` exit 0. External DMEM 19/19 words equal; each result written once; END pulse/HALTED/restart ignored verified. Includes scalar arithmetic/logic/shift/wrap, LW/SW, packed CSR truncation/sign, x0, BEQ/BNE and JAL link.
+- Evidence `07_runs/npu/scalar_377ea75f5d`, simulator hashes/logs `99_build/npu_scalar_573340c9`, launcher log `99_build/npu_m0/m2_args_repair.log`.
+- Preserved tool failures: cf6d25d1 and a4fff9b0 unsupported xelab -O (first repair incorrectly changed argument; second removed unsupported switch); b01feb56 missing default timescale (fixed --timescale 1ns/1ps); scalar_8e0ac731d5 XSim batch '=' tokenization (fixed quoting complete key=value). No RTL result mismatch. Four substantive tool repairs total across three distinct blockers; no recovery branches. Next M3.
