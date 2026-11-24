@@ -22,15 +22,15 @@ The document author's original NOT RUN template is superseded by the observed ga
 | M7 V200 | PASS | 72f48a1 | 07_runs/npu/v200_20261125_024439_4aec3b | 200/200 |
 | M7 V200F | PASS | 72f48a1 | 07_runs/npu/v200f_20261125_024812_6bde90 | 2400 bytes+200 indices |
 | M8 synthesis | PASS | e303caa+FPGA hashes | 99_build/npu_ooc_380ec37d39 | Synth WNS2.058ns; BRAM109.5/135 |
-| M9 post-route | NOT RUN | — | — | |
+| M9 post-route | PASS | 5086240 | 99_build/npu_ooc_380ec37d39/routed_gate.json | WNS0.312ns/WHS0.145ns; route7888/7888 |
 | M10 power/report | NOT RUN | — | — | |
 
 ## Current checkpoint
 - Branch/base: npu-v2/20261125 / 2e89b8e994982094a36172a3fd2f65d4a9edaff7
-- Last passing milestone / commit: M8 synthesis / see M8 gate commit
-- Current action: M9 actual opt/place/route
+- Last passing milestone / commit: M9 post-route / see M9 gate commit
+- Current action: M10 power and final report
 - Retry attempts used / recovery branches used: 4 tool-launch repairs / 0
-- Next gate: M9 post-route
+- Next gate: M10 power/report
 - Blockers: none currently
 
 ## Log template
@@ -97,3 +97,10 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - Synthesis timing only: WNS2.058ns/TNS0, WHS0.214ns/THS0;7923 setup/hold endpoints. No_clock0, unconstrained_internal_endpoints0. Boundary no_input_delay66/no_output_delay101; clk HD.CLK_SRC not specified in OOC. NOT a post-route pass.
 - Synth DRC43 reported warnings, no errors: CFGBVS-1(1), CHECK-3(2 report limits), REQP-1839/1840(20 each, async reset/control into BRAM). Preserve required legacy async reset and report reset-release/IO scope; no suppressed warnings or invented board voltage. Benign unused inferred BRAM mux bits and EX/MEM wb_sel optimized; no latches.
 - Reviewed actual `synth_utilization.rpt`, `synth_utilization_hier.rpt`, `synth_timing_summary.rpt`, `synth_drc.rpt`, `synth_check_timing.rpt`, console. Launcher `99_build/npu_m0/m8.log`; tool command/exit JSON in build. Next M9 opt/place/phys_opt/route; no new repair.
+
+## M9 post-route PASS / 2026-11-25
+- Source5086240, same RTL as functional gates (af16594). `conda run -n aissd python 90_scripts/npu/build_fpga.py implement --run 99_build/npu_ooc_380ec37d39` exit0; actual opt_design/place_design/phys_opt_design/route_design, routed.dcp, all reports, bare NPU_ROUTE_TIMING_COMPLETE.
+- Routed WNS +0.312ns,TNS0,0/7923 setup endpoints failing; WHS+0.145ns,THS0,0/7923 hold endpoints failing; pulsewidth slack4.020ns,0/2421 failing. `routed_gate.json` also independently queries no negative setup/hold paths. check_timing: no_clock0,unconstrained_internal_endpoints0. 7888/7888 routable nets fully routed; routing errors0 (11111 logical nets,3223 no routing needed).
+- Routed LUT4910/63400(7.74%),FF2180/126800(1.72%),RAMB36=104,RAMB18=11=>109.5/135tiles81.11%,DSP0/240. LUT distributedRAM0,SRL11. No resource overflow. Worst setup output_shift_reg[4]→postprocess shift/saturation/mux→A BRAM DIBDI[0],9.363ns data(2.666logic+6.697route),11 logic levels. No RTL optimization/recovery/re-run necessary; first route passed.
+- Reports `99_build/npu_ooc_380ec37d39/routed_{timing_summary,critical_setup,critical_hold,route_status,utilization,utilization_hier,drc,clocks,check_timing}.rpt`. Launcher `99_build/npu_m0/m9.log`; command/exit0 JSON in build. DRC43 reported warnings as synth, default per-rule report limits noted; no error-severity DRC. OOC no_input_delay66/no_output_delay101, unset HD.CLK_SRC/HD.PARTPIN_LOCS and CFGBVS, async reset/control warnings retained; no board I/O/clock insertion/reset-release signoff claim. No false/multicycle paths, period remains10ns.
+- Next M10 routed power last, then final evidence/hash/report/clean tracked worktree. Tool repairs4, timing repairs0, recovery0.
