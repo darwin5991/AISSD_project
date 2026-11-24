@@ -1,0 +1,73 @@
+{
+  "name": "v20",
+  "sample_ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "save_outputs": [
+    "argmax"
+  ],
+  "ops": [
+    {
+      "id": "fc1",
+      "op": "gemm",
+      "k": 784,
+      "n": 512,
+      "src": "A",
+      "dst": "B",
+      "bias_shift": 3,
+      "out_shift": 10,
+      "relu": true
+    },
+    {
+      "id": "fc2",
+      "op": "gemm",
+      "k": 512,
+      "n": 128,
+      "src": "B",
+      "dst": "A",
+      "bias_shift": 1,
+      "out_shift": 7,
+      "relu": true
+    },
+    {
+      "id": "fc3",
+      "op": "gemm",
+      "k": 128,
+      "n": 10,
+      "src": "A",
+      "dst": "B",
+      "bias_shift": 2,
+      "out_shift": 7,
+      "relu": false
+    },
+    {
+      "id": "argmax",
+      "op": "argmax",
+      "src": "B",
+      "length": 10
+    }
+  ],
+  "checkpoint": "03_model/checkpoints/MLP_MNIST_GPU_FINAL_BEST.pth",
+  "timer": false,
+  "waveform": false,
+  "reuse_weights": true
+}

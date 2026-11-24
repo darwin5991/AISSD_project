@@ -64,3 +64,9 @@ Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, 
 - `07_runs/npu/scalar_52cc5fe152`, `dma_9c0e67b2e2`, `gemm_9f3f342382`, `argmax_4105a01fb9`, `chain_3de93df10a`. Logs/source hashes under `99_build/npu_all_*`; launcher `99_build/npu_m0/m5.log`.
 - ARGMAX signed/ties/length1,5,10, both banks/nonzero offsets, padding ignored; timer retains DMA count across ARGMAX, TSTART clears count, ARGMAX/scalar excluded. DMA→GEMM→STORE→ARGMAX integrated on three small configurations. Timer overflow sticky wrap implemented and reviewed; no forced state/billion-cycle run.
 - All new validation uses external top buses and output memory only. Legacy leaf RTL byte-identical to baseline. No new failures; repairs4/recovery0. Next M6 V1 toolchain.
+
+## M6 V1 PASS / 2026-11-25
+- Anchor ad1a68c. Complete runner supports separate generate/simulate/compare and combined verify; assembler separate CLI. Immutable quantized/reference/program/input hashes, ordered sample IDs and per-range layout recorded in manifest. Comparator rejects format/unknown/length/hash mismatch and emits first mismatch address/raw/signed details; failed model comparisons automatically generate full-layer diagnostic program for failed original IDs. No observed mismatch.
+- Command `conda run -n aissd python 90_scripts/npu/run_verification.py verify --count 1 --save fc1,fc2,fc3,argmax` exit 0. Actual V1: FC1 512/512, FC2 128/128, FC3 12/12 including zero pads, ARGMAX1/1; each output word written once, one reset/start/END. Reference label match1/1.
+- Evidence `07_runs/npu/mnist_1_fc1_fc2_fc3_argmax_20261125_024139_b33a42`, log `99_build/npu_m0/v1.log`, exact build/source hashes in run/logs/simulator_sources.json. Test source version RTL af16594 (unchanged through ad1a68c), precommit Python hashes in manifest.
+- Committed declarative required scenario configs; generic --count/--ids/--save supports later 1000/10000. Repairs4/recovery0. Next M7 sequential gates.
