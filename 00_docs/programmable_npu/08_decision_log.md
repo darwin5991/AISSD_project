@@ -37,3 +37,7 @@ Recovery branch if applicable:
 - Anchor 72f48a1; use explicit new-top source list, OOC xc7a100tcsg324-1, sole 10ns clock, no path exceptions or IO timing claims. Unchanged single_port_bram area decomposition preserved; inspect actual utilization/hierarchy and routed reports.
 - Use nonproject synth (rebuilt hierarchy), opt/place/phys_opt/route default directives with maxThreads6; no seed sweep or architectural alternative. Source/constraint hashes, commands, logs, reports and DCP retained in unique ignored build folder. Power runs separately only after six matching functional gates and routed setup/hold pass.
 - Alternative GUI project or blanket legacy source glob rejected as unnecessary and potentially ambiguous. No semantic/timing-contract changes are authorized by this implementation choice.
+
+## D006 / 2026-11-25 / M10 source identity
+- Anchor5cf0429; power precheck rejected a string-key mismatch, not a content mismatch. Existing sim artifact paths contain Windows backslashes; FPGA manifest normalizes forward slashes. Independent audit found39/39 RTL SHA256 values identical after path normalization.
+- Normalize only dictionary path separators at lookup, then require exact SHA equality for every RTL source in each of six mandatory gates. Alternative rerun simulations or edit old evidence rejected because neither addresses the string-key cause. Preserve failed launcher log npu_m0/m10_power.log. Retry actual power and final integrity audit PASS; no hardware, constraints or expected arrays changed.

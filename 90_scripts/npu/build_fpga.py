@@ -27,8 +27,9 @@ def main():
                 r=Path(name);m=json.loads((r/'manifest.json').read_text());cmp=json.loads((r/'comparison.json').read_text())
                 if not cmp['passed']:raise ValueError('functional failure')
                 sim=json.loads((r/'logs/simulator_sources.json').read_text())
+                sim_hashes={key.replace('\\','/'):digest for key,digest in sim['sources'].items()}
                 for key,digest in record['sources'].items():
-                    if sim['sources'].get(key)!=digest:raise ValueError('functional/route source mismatch')
+                    if sim_hashes.get(key)!=digest:raise ValueError('functional/route source mismatch '+key)
                 counts.append((len(m['sample_ids']),tuple(m['fields'])))
                 evidence.append(dict(run=str(r),comparison_sha256=sha(r/'comparison.json')))
             needed=[(1,('fc1','fc2','fc3','argmax')),(5,('fc1','fc2','fc3','argmax')),(20,('argmax',)),(100,('argmax',)),(200,('argmax',)),(200,('fc3','argmax'))]
