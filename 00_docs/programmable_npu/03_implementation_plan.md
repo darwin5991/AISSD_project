@@ -2,9 +2,9 @@
 
 > 2026-11-24 결정 우선순위: [07_design_decisions_phase0.md](07_design_decisions_phase0.md)의 D-01~D-04와 후속 사용자 확정을 우선 적용한다.
 
-**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행(Phase 5/6 이력):** Phase 4를 6efeec4에 보존한 뒤 사용자 승인에 따라 Phase 5 GEMM 구현·검증을 완료했다. [Phase 5 결과](15_phase5_report.md)의 Gate PASS와 정식 지원 하한 K=8 확정을 기록한다. Phase 6도 후속 승인에 따라 독립 ARGMAX 구현·검증 Gate PASS다. [18번 결과](18_phase6_report.md)를 따르며 Phase 7/8은 별도 승인 전 진행하지 않는다.
+**목표:** 기존 고정 3-Layer INT8 MLP RTL을 보존·재활용하면서 ISA v1.0에 따른 Programmable NPU Top, Python 통합 테스트 환경, FPGA 구현 경로를 단계적으로 완성. **현재 진행(Phase 5/6 이력):** Phase 4를 6efeec4에 보존한 뒤 사용자 승인에 따라 Phase 5 GEMM 구현·검증을 완료했다. [Phase 5 결과](15_phase5_report.md)의 Gate PASS와 정식 지원 하한 K=8 확정을 기록한다. Phase 6도 후속 승인에 따라 독립 ARGMAX 구현·검증 Gate PASS다. [18번 결과](18_phase6_report.md)를 따르며 당시 후속 Phase는 별도 승인 대상이었고, 현재 상태는 아래 후속 요약을 따른다.
 
-**현재 후속 상태:** Phase 6은 4d4cd43에 보존했고, Phase 7 첫 1/5/100/200장과 전체 회귀 Gate PASS다. 아래 Phase 7과 19번 보고서가 이번 승인 범위를 정의한다. 10,000장 및 Phase 8은 미실행이다.
+**현재 후속 상태:** Phase 7은 94bb214에 보존했다. 새 Phase 8 브랜치에서 Direct BRAM 합성·배치배선과 기능 회귀를 완료했으며 Timing Gate는 FAIL이다. 아래 Phase 8과 20번 보고서를 따른다. 10,000장은 보류한다.
 
 ## 0. Codex에 전달할 공통 지시
 
@@ -17,7 +17,6 @@
 7. 지원하지 않는 Reserved Register/CSR/Opcode/Memory Access는 무시하거나 0으로 읽지 말고 명세상의 Fault로 처리.
 8. 기능별 Pass/Fail 결과를 `07_runs/` 기록으로 남기되, 빌드 산출물과 대용량 메모리 HEX는 기존 `.gitignore`/저장소 정책에 맞게 관리.
 
-**현재 후속 상태:** Phase 6은 4d4cd43에 보존했고, Phase 7 첫 1/5/100/200장 및 전체 회귀 Gate PASS다. 아래 Phase 7과 19번 보고서가 이번 승인 범위를 정의한다. 10,000장 및 Phase 8은 미실행이다.
 
 ## Phase 0 — 기존 RTL 기준선과 검증 방법 확인
 
@@ -150,7 +149,7 @@
 
 [Verification Plan 5.1절](04_verification_plan.md)의 A-01~A-16 및 경계/복합 오류 매트릭스를 구현·실행해 PASS했다. 특히 LEN=11의 0x07/0x06 구분, LEN=0의 시작 Bounds, 상위 비트/올림 산술, 마지막 IMEM의 데이터/next-PC 오류 병합을 검증한다.
 
-완료 조건은 정상 결과/GPR zero-extend·r0 버림, Snapshot, 무부작용 Fault Halt/Reset, Timer 제외, R→R+1 실파형, 전체 회귀 PASS다. **Top done은 END에서만 1클럭**, argmax_done은 내부 완료다. 실제 근거는 18번 보고서/metrics/source snapshot/wave audit에 기록했다. Phase 7/8은 별도 승인 전 진행하지 않는다.
+완료 조건은 정상 결과/GPR zero-extend·r0 버림, Snapshot, 무부작용 Fault Halt/Reset, Timer 제외, R→R+1 실파형, 전체 회귀 PASS다. **Top done은 END에서만 1클럭**, argmax_done은 내부 완료다. 실제 근거는 18번 보고서/metrics/source snapshot/wave audit에 기록했다. 당시 후속 Phase는 별도 승인 대상이었고, 현재 상태는 아래 후속 요약을 따른다.
 
 ## Phase 7 — MNIST Application Verification (첫 200장 승인 범위)
 
@@ -182,13 +181,24 @@ G2/G3/G4는 동일한 111word/444byte 코드 구조다. 100/200장의 기계어 
 
 모든 Application은 TSTART/TSTOP와 Waveform을 사용하지 않는다. G1에만 Layer STORE를 넣고 G2/G3/G4는 Prediction만 외부 DMEM에 쓴다. TB cycle 통계는 PERF Timer 측정이 아니다. 시간·메모리는 실측값과 측정 범위를 19번에 기록했다. Label 정확도는 실측 보고이며 별도 최소 기준을 추가하지 않는다.
 
-의존성 확인 중 읽기 전용 샌드박스의 임시 디렉터리 제한이 발생했고 승인된 권한에서 같은 aissd import가 성공했다. 패키지 설치·환경 변경이나 RTL 수정은 없었다. 기능/Golden/시뮬레이션 실패·timeout은 없었다. 커밋·Push와 10,000장·Phase 8은 수행하지 않는다.
+의존성 확인 중 읽기 전용 샌드박스의 임시 디렉터리 제한이 발생했고 승인된 권한에서 같은 aissd import가 성공했다. 패키지 설치·환경 변경이나 RTL 수정은 없었다. 기능/Golden/시뮬레이션 실패·timeout은 없었다. Phase 7 당시 커밋·Push와 10,000장·Phase 8은 수행하지 않았다. 이후 Phase 7을 94bb214에 보존했고, 별도 승인된 Phase 8 결과는 아래와 20번 보고서를 따른다.
 
-## Phase 8 — FPGA BMEM IP 적용 / 합성 / Timing / 보고
+## Phase 8 — Direct RTL BRAM Inference / OOC Synthesis & Implementation
 
-**수행:** 최종 내부 SRAM 7개를 Native Single-Port BMEM IP/호환 Wrapper로 연결(primitive output register disabled), 1clk read를 검증. 외부 DMEM 16MiB TB 모델은 **합성하지 않음**; 실제 FPGA 외부 메모리 연동은 과제 범위에 맞는 별도 Wrapper로 구분. Vivado 합성/배치배선, Timing Slack, LUT/FF/BRAM/DSP, Power 분석. 최소한 과제에서 요구하는 메모리 transfer/compute waveform 확보.
+**현재 상태: Timing Gate FAIL / 후속 승인 대기.** 기존 BMEM IP 전환 계획은 최신 사용자 승인에 따라 직접 RTL 추론 방식으로 대체한다. BMG IP/.xci를 만들지 않는다. 10,000장 정확도 검증은 보류하며 Phase 7 G0~G4의 기준선과 커밋 94bb214를 보존한다.
 
-**완료 조건:** BMEM IP 동기 응답이 행동 모델과 동등, 기능 회귀, 지정 클럭에서 WNS≥0 목표, 자원/파워/Timing 보고서 생성. 실제 도구 실행 결과만 정량 결과로 기록.
+| 순서 | 수행 범위 | 완료 기준 / 실제 결과 |
+|---|---|---|
+| P8-0 | Phase 7 기준선·도구·별도 브랜치 / Non-Project Flow | phase8/direct-bram-inference-20261124, Vivado 2025.2, Legacy 프로젝트 보존 |
+| P8-1 | npu_top 및 기존 SRAM 무수정 첫 합성 | 7개 논리 SRAM, BRAM 109.5/135타일, LUTRAM 0, mapped netlist G1 PASS |
+| P8-2 | FPGA Reset 경계 및 기능 회귀 | 2FF Async Assert/Sync Deassert, Reset/SRAM 17개, Wrapper G1/G4 및 기존 회귀 PASS |
+| P8-3 | 동일 100MHz에서 opt/place/phys_opt/route | 실제 도구 실행 완료, Timing과 구분 |
+| P8-4 | Setup/Hold 및 경계·경고 분석 | WNS≥0, WHS≥0, TNS=THS=0 필요; 실제 판정 FAIL |
+| P8-5 | 보고·승인 경계 | [20번 보고서](20_phase8_report.md). 실패 시 임의 RTL/주파수/예외 변경 없이 중단 |
+
+변경은 신규 06_fpga Reset Wrapper·Tcl·XDC, 전용 TB와 Phase 8 실행기, 현재 계획/결과 문서에 한정한다. 기존 04_rtl 전체, SRAM 7개, MAC R→R+6, ISA/CSR/외부 메모리 프로토콜, 기존 TB/실행기와 Legacy 프로젝트는 보존한다. 외부 IMEM/DMEM의 TB 저장소는 합성 입력에 넣지 않는다.
+
+아래 명령으로 각 Gate를 재현하며 출력은 새로운 07_runs/99_build 디렉터리에 분리한다. 구체적인 Checkpoint·Manifest·명령은 20번 보고서를 따른다. Power/보드 I/O/Bitstream/보드 실험/타이밍 시뮬레이션은 이번 완료 결과에 포함하지 않는다.
 
 ## 9. 구현 순서와 테스트 게이트 요약
 

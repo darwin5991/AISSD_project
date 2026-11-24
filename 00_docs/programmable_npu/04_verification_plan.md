@@ -208,14 +208,26 @@ Weight/Bias 5회 LOAD → Input LOAD → FC1/2/3 각각 EXEC GEMM 및 STORE → 
 
 ### 후속 승인 범위
 
-기존 S-03의 10,000장 정확도 목표와 S-04 모델 전환은 유지하되 이번 Gate 완료 조건에서 제외한다. 10,000장 결과·전체 정확도·FPGA/BMEM 합성을 수행하거나 PASS로 표시하지 않는다. 기존 Phase 1~6/Memory Fault/Python/Legacy 5종 회귀도 모두 실제 재실행 PASS했다.
+기존 S-03의 10,000장 정확도 목표와 S-04 모델 전환은 유지하되 이번 Gate 완료 조건에서 제외한다. Phase 7 범위에서는 10,000장 결과·전체 정확도·FPGA 합성을 수행하거나 PASS로 표시하지 않았다. 후속 승인된 Direct BRAM 합성 결과는 다음 Phase 8 절과 20번 보고서를 따른다. 기존 Phase 1~6/Memory Fault/Python/Legacy 5종 회귀도 모두 실제 재실행 PASS했다.
 
-## 7. FPGA/BMEM 및 합성 검증
+## 7. Phase 8 — Direct RTL BRAM / FPGA OOC 검증
 
-- Native Single-Port BMEM IP, 32bit interface, Primitive Output Register Disabled, 1clk synchronous read. 전환 전후 Memory Model 출력/Timing 비교.
-- Testbench 외부 Memory HEX 초기화 방식과 실제 합성 가능한 코어를 분리 (`initial`, `$readmemh/$writememh`가 합성 RTL에 포함되지 않아야 함).
-- Synthesis에서 내부 SRAM이 Block RAM으로 인스턴스화되었는지 확인. OOC Synthesis + Implementation Timing, WNS≥0 목표. LUT/FF/BRAM/DSP 및 Power 보고.
-- 최소 waveform 자료: LOAD 외부→내부 Write, GEMM의 SRAM Input/Weight Read, Output SRAM Write, DONE, ARGMAX Read/Result.
+최신 사용자 승인으로 기존 BMEM IP 전환 검증을 직접 RTL BRAM Inference 검증으로 대체한다. FPGA는 xc7a100tcsg324-1, Vivado 2025.2, npu_clk=100MHz(10ns)다. 첫 Synthesis는 npu_top·single_port_bram 무수정으로 실행한다. BMG IP/.xci와 TB 외부 메모리 모델은 합성 입력에서 제외한다.
+
+| Gate | 필수 검증 |
+|---|---|
+| P8-1 | 7개 SRAM의 논리 Width/Depth/Array Bits, RAMB36/RAMB18 수, LUTRAM/FF 대체 여부, 자원≤135타일, 출력 레지스터 추가 없음 |
+| P8-2 | 실제 합성 Netlist의 G1 Prediction 및 FC1/2/3 163word Golden 일치 |
+| P8-3 | Reset Async Assert/2edge Sync Release, EN=0/Write 시 출력 Hold, Reset 중 쓰기 차단·내용 유지·해제 후 첫 Read |
+| P8-4 | FPGA Wrapper G1/G4(200장), 원래 Phase 1~6·Memory Fault Priority·Python·Legacy RTL 5종 및 기존 Application G0/G1/G4 재실행 |
+| P8-5 | opt_design / place_design / phys_opt_design / route_design / DRC 및 자원 보고 |
+| P8-6 | 내부 OOC Setup/Hold: WNS≥0, WHS≥0, TNS=0, THS=0. Logic/Route/Skew와 Worst Path를 기록 |
+
+물리 RAM_SP/RAM_SDP 포트 구성과 논리 Single-Port 의미를 구분한다. 작은 RAM의 물리 512word 패딩은 ISA Bounds를 늘리지 않는다. Write 중 출력 Hold는 primitive WRITE_MODE 문자열 하나로 판정하지 않고 기존 Read/Write Enable 배타성과 기능 비교를 함께 확인한다.
+
+외부 I/O Delay·보드 핀·전압·False/Multicycle Path를 임의로 추가하지 않는다. check_timing의 no_input_delay/no_output_delay와 BRAM 비동기 제어/Reset 관련 DRC를 숨기지 않는다. 내부 OOC 통과가 보드 전체 Timing이나 비동기 전이의 아날로그 안전성 검증을 뜻하지 않는다. BRAM/용량/도구 실행 실패 또는 Timing 실패 시 원인과 대안을 보고하고 승인 없이 RTL·Read Latency·MAC Pipeline·주파수·예외를 변경하지 않는다.
+
+G4는 Timer/Waveform/중간 Layer STORE OFF, Prediction 200개와 Golden 200/200·정상 END·Fault 없음으로 판정한다. G1에서만 Layer STORE를 사용한다. 이번 Phase 8에서 신규 파형은 저장하지 않았고 기존 Phase 5/6의 R→R+6/R→R+1 파형 근거와 신규 기능 로그를 구분한다. 실제 측정값과 실패 이력은 [20번 보고서](20_phase8_report.md)에 기록한다.
 
 ## 8. 공통 PASS 판정 / 실패 기준
 

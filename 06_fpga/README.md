@@ -60,3 +60,16 @@ Tcl은 원본 소스를 참조하며 복사하지 않는다. 기존 출력 폴�
 - [설계 명세](../00_docs/architecture.md), 3절 및 6.3절.
 
 기존 합성·배치배선 checkpoint는 이전 2단 구조의 산출물이다. `.xpr`는 수정한 원본 RTL을 참조하므로 새 구조의 결과를 얻으려면 기능 검증 후 재합성이 필요하다. 이번에는 RTL 코드만 수정했고 새 데이터는 앞선 생성 단계에서 준비했다. 기능 검증·재합성·배치배선은 각각 별도 요청을 받아 진행한다. 이번 개정에서 OOC 클럭 위치, 입출력 지연, reset 안전성 또는 DSP 강제 사용을 새로 확정하지 않았다.
+
+## Programmable NPU Phase 8 — Direct RTL Inference (2026-11-24)
+
+이 절은 위의 Legacy MLP 실행 이력과 별도다. 최신 사용자 승인에 따라 BMG IP를 생성하지 않고 기존 npu_top 및 SRAM을 직접 합성한다. 첫 합성 Top은 npu_top, FPGA Reset 적용 후 Top은 npu_fpga_top(내부 u_npu=npu_top)이다. Legacy XPR/Top/XDC와 기존 04_rtl은 변경하지 않는다.
+
+- Part: xc7a100tcsg324-1 / Vivado 2025.2 / 100MHz.
+- 제약: constraints/npu_direct_ooc.xdc의 create_clock 하나. 보드 핀·I/O Delay·가상 I/O 제약·False/Multicycle Path 없음.
+- Reset: rtl/npu_reset_sync.sv와 npu_fpga_top.sv, Async Assert / 2edge Sync Deassert. start는 코어 Reset 해제 후 제공한다.
+- 합성: tcl/npu_direct_synth.tcl, 90_scripts/npu/run_phase8_synth.py.
+- 배치·배선: tcl/npu_direct_impl.tcl, 90_scripts/npu/run_phase8_impl.py. 검토된 Memory Gate JSON이 있어야 진행한다.
+- 검증: run_phase8_verify.py, run_phase8_regressions.py. 기존 SRAM·MAC·외부 메모리 인터페이스는 보존한다.
+
+실제 결과·실행 명령·Checkpoint/Manifest/Timing 로그·승인 경계는 [Phase 8 보고서](../00_docs/programmable_npu/20_phase8_report.md)를 따른다. 외부 IMEM/DMEM 저장소, Bitstream, 보드 Timing, 10,000장 실행은 이번 결과에 포함하지 않는다.

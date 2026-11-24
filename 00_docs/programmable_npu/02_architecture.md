@@ -108,7 +108,6 @@ Phase 5 구현 승인은 [14번 결정](14_phase5_decisions.md)을 따른다. CS
 독립 GEMM Engine은 기존 unpack/MAC/Accumulator를 연결하고, layer 없는 Controller가 PREP 1edge → RUN → DRAIN → 완료 → IDLE로 실행한다. 최종 Write 이후에만 done을 알린다.
 Wrapper의 기존 GEMM bank별 물리 포트를 사용하며, 주소는 축소 전에 전체 설정/끝 주소 및 실행 중 접근을 검사한다. 입력/출력은 반대 Buffer이고 Weight 4 bank는 같은 offset으로 병렬 Read한다.
 
-
 ### 현재 구조
 
 현재 `control_unit.sv`는 `start → FC1 → FC2 → FC3 → ARGMAX → done` 자동 진행. `layer_config_lut.sv`가 고정 3 Layer 설정을 제공하며, `control_fsm.sv`와 `read_issue_control.sv`에 `layer_index`와 ARGMAX 자동 전이가 들어 있다.
@@ -218,7 +217,7 @@ Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산
 | `memory/memory_port_mux.sv` | 교체 또는 신규 `sram_port_mux.sv` | 기존 `busy` 2-way MUX는 부적합 |
 | `memory/buffer_router.sv` | 재사용 가능; 주소 offset 지원 검토 | 입력/출력 반대 Buffer 선택 기능 유지 |
 | `memory/tb_address_decoder.sv`, `tb_read_mux.sv` | 레거시 TB 전용으로 격리 가능 | 정상 ISA Data path는 사용하지 않음 |
-| `memory/single_port_bram.sv` | 시뮬레이션 모델/기존 검증 유지 | 1clk read 동작 확정; FPGA 최종 BMEM IP wrapper 별도 |
+| `memory/single_port_bram.sv` | 시뮬레이션 모델/기존 검증 유지 | 기존 RTL 직접 BRAM 추론; 실제 깊이/비동기 출력 Reset/1clk read 보존, Phase 8 결과는 20번 보고서 |
 | `mac_array/*`, `accumulator_postprocess/*`, `common/*` | 기본적으로 그대로 | 기존 연산 정확도와 파이프라인 보존 |
 | `05_tb/controller/*` | 신규 NPU TB를 별도 작성 | IMEM/외부 DMEM HEX 모델, 결과 dump/compare 필요 |
 
@@ -227,10 +226,19 @@ Phase 4 구현: Controller에서 unsigned Base + signed imm12를 33bit로 계산
 ## 8. 외부/내부 메모리 물리 현실과 FPGA
 
 - DMEM 16 MiB에 MNIST 10,000개를 배치하는 것은 **시뮬레이션 모델**. 이를 Artix-7 내부 BRAM으로 모두 합성하는 설계가 아님. 실제 FPGA 구동 시에는 온보드 DDR/Host Streaming/외부 Storage Adapter 등 새로운 주변 시스템이 필요.
-- 과제 조건상 최종 **NPU 내부 SRAM 7개**에 Block Memory Generator IP의 Native Single-Port 구성을 적용하고 Primitive Output Register 비활성화. 포트는 `clka/ena/wea/addra/dina/douta`를 대응시키고 Full-Word Write(별도 Byte Write 비활성화) 사용. Read-while-Write 데이터 Hold 계약에 맞도록 `NO_CHANGE`에 해당하는 메모리 Write Mode를 선택·검증. 동작은 `single_port_bram` 모델과 동일한 1clk Read로 맞추고 Simulation과 Post-Synthesis에서 확인.
+- Phase 8 최신 사용자 결정: **BMG/BMEM IP로 교체하지 않고 기존 single_port_bram RTL을 직접 BRAM 추론**한다. xc7a100tcsg324-1 / Vivado 2025.2 / npu_clk 100MHz(10ns) OOC가 대상이다. 첫 합성은 npu_top과 SRAM RTL을 그대로 사용하고, 이후 FPGA Reset 경계만 npu_fpga_top/npu_reset_sync로 추가했다. 원래 7개 논리 깊이·32bit 폭·1clk Read·상승 에지 Write·Write/Disable 시 출력 Hold·비동기 출력 Zero Reset을 보존한다. BMG IP/.xci 생성은 하지 않는다.
 - BRAM 내용은 Reset으로 초기화하지 않는다. `initial/$readmemh/$writememh`는 Testbench/외부 모델에만 사용, 합성 대상 코어에서는 사용 금지. 외부 데이터는 LOAD로 내부 SRAM에 적재.
 - 성능·자원·Power/Timing 수치는 실제 Vivado 합성/배치배선 리포트를 통해서만 주장. MAC 변경 없이도 Address MUX/Decoder/CSR/ALU가 추가되므로 타이밍을 다시 측정해야 함.
 
+### Phase 8 물리 구현과 판정 범위 (2026-11-24)
+
+외부 rst_n은 npu_reset_sync의 2FF(ASYNC_REG, SHREG_EXTRACT=NO)를 통해 Async Assertion / Sync Deassertion으로 코어에 전달한다. SRAM 내용은 Reset으로 지우지 않는다. core_rst_n은 입력 Reset 해제 후 두 번째 상승 에지 직후 올라가므로 start는 그 이후 코어가 수락 가능한 상승 에지에 제공해야 한다. Reset 중 start는 차단하며 조기 start를 저장/재생하는 기능은 없다. 외부 IMEM/DMEM 포트와 기존 npu_top은 변경하지 않았다.
+
+실제 합성 결과는 RAMB36E1 104개 + RAMB18E1 11개 = 109.5/135타일(81.11%)이며 LUTRAM은 0이다. Weight 각 Bank는 RAM_SP(26×RAMB36+2×RAMB18), 작은 A/B/Bias는 RAM_SDP(각 1×RAMB18, 물리 512×32)로 보고된다. 물리 primitive 모드와 논리 Single-Port 계약은 구분한다. 작은 RAM의 미사용 물리 주소는 기존 Bounds 검사로 노출되지 않는다. primitive DOA_REG/DOB_REG는 모두 0이며 추가 출력 지연을 넣지 않았다.
+
+OOC 제약은 clk의 10ns create_clock뿐이다. 외부 I/O Delay·핀·전압·False/Multicycle Path를 임의로 정하지 않았다. 따라서 내부 Setup/Hold 결과와 외부 인터페이스/보드 Timing 보장을 구분한다. 실제 Timing, 비동기 BRAM 제어 경고와 남은 조치는 [20번 보고서](20_phase8_report.md)를 따른다.
+
+Phase 8의 실제 OOC Netlist는 BUFG/MMCM/PLL이 0개이고 clk 경계 지연은 도구 모델이다. 내부 데이터 경로 배선과 Parent/보드 Clock Tree 배선은 구분하며 Hold 수치도 이 모델 범위의 결과다. 세부 한계는 20번 보고서에 기록했다.
 
 ## 메모리/next-PC Fault 우선순위 후속 통합 (2026-11-24)
 

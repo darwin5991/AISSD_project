@@ -1,6 +1,6 @@
 # Programmable NPU v1.0 — 문서 색인
 
-> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1~6 Scalar/CSR/Timer/Block/SRAM/GEMM/ARGMAX 구현·검증 PASS / 최소 K=8 확정 / 메모리·PC 복합 Fault 후속 Gate PASS / Phase 6 D-01/D-02 적용·Gate PASS / Phase 7 첫 1/5/100/200장 Application 검증 PASS / 10,000장·Phase 8 별도 승인 대기**
+> 문서 확정일: 2026-11-24 · 대상 저장소: `darwin5991/AISSD_project` · 구현 상태: **Phase 1~6 Scalar/CSR/Timer/Block/SRAM/GEMM/ARGMAX 구현·검증 PASS / 최소 K=8 확정 / 메모리·PC 복합 Fault 후속 Gate PASS / Phase 6 D-01/D-02 적용·Gate PASS / Phase 7 첫 1/5/100/200장 Application 검증 PASS / Phase 8 Direct BRAM 합성·배치배선 완료 / Timing Gate FAIL / 후속 승인 대기 / 10,000장 보류**
 >
 > 기존 `00_docs/architecture.md`는 **고정 3-Layer MLP 베이스라인**을 설명한다. 이 디렉터리는 그 RTL을 **명령어 구동 NPU**로 확장하기 위한 새로운 구현 계약이다. 기존 성능/정확도 수치를 새 설계의 검증 결과로 인용하지 않는다.
 
@@ -25,13 +25,14 @@
 17. [17_phase6_decisions.md](17_phase6_decisions.md): ARGMAX 복합 Fault·원본 ARG_LEN 범위 검사 확정 (결정 본문 보존)
 18. [18_phase6_report.md](18_phase6_report.md): 독립 ARGMAX/Snapshot/Fault/Timer/실파형·전체 회귀 PASS (후속 보존 커밋 4d4cd43)
 19. [19_phase7_report.md](19_phase7_report.md): RTL 변경 없이 첫 1/5/100/200장 연속 추론·Golden·정확도·전체 회귀 PASS
+20. [20_phase8_report.md](20_phase8_report.md): 직접 BRAM 추론·FPGA Reset·100MHz OOC 합성/배치배선·회귀 및 Timing 판정
 
 ## 이번에 최종 확정한 선택
 
 - IMEM/외부 DMEM: **독립적인 32-bit Single-Port 동기식 인터페이스**, 고정 1클럭 읽기 응답; Write는 요청 수락 상승 에지에 완료.
 - Timer: `TSTART/TSTOP`으로 활성화/정지, **LOAD/GEMM 엔진이 실제 active인 사이클만** 32-bit 카운트; STORE·ARGMAX·Fetch·CSR·Scalar는 제외.
 - Fault: `ERROR_CODE`와 `STATUS`를 기록하고 **Error Halt**, 프로그램 내 trap 없음, Reset으로 복구.
-- 내부 SRAM: **1클럭 동기식 읽기**, 각 RAM Single-Port, 추가 BRAM primitive output register 없음. 최종 FPGA 구현은 과제 조건에 맞는 Block Memory Generator(BMEM) Native Single-Port IP로 매핑.
+- 내부 SRAM: **1클럭 동기식 읽기**, 각 RAM Single-Port, 추가 BRAM primitive output register 없음. Phase 8 최신 승인에 따라 기존 RTL을 직접 BRAM 추론하며 BMG IP로 교체하지 않는다.
 
 ## 결정과 가정의 구분
 
@@ -53,4 +54,8 @@ conda aissd Python 3.11에서 저장소 루트 기준 실행:
 & "C:/Users/darwi/.conda/envs/aissd/python.exe" -X utf8 -B 90_scripts/npu/run_scenario.py --vivado-bin D:/AMDDesignTools/2025.2/Vivado/bin
 ~~~
 
-기본 명령은 G0~G4 및 Phase 1~6/Memory Fault/Python/Legacy 5종 회귀를 실행한다. --counts로 1/5/100/200의 오름차순 부분집합을 선택하거나 --no-regressions를 사용한 개발 실행은 PARTIAL이며 최종 Gate를 대체하지 않는다. G1에만 중간 Layer STORE가 있고 모든 Application 실행은 Timer/Waveform OFF다. 프로그램은 8 GPR와 기존 ISA만 사용한다. 10,000장, 별도 모델 전환, FPGA/BMEM/합성은 미실행이며 별도 승인 범위다. 커밋·Push는 하지 않았다.
+기본 명령은 G0~G4 및 Phase 1~6/Memory Fault/Python/Legacy 5종 회귀를 실행한다. --counts로 1/5/100/200의 오름차순 부분집합을 선택하거나 --no-regressions를 사용한 개발 실행은 PARTIAL이며 최종 Gate를 대체하지 않는다. G1에만 중간 Layer STORE가 있고 모든 Application 실행은 Timer/Waveform OFF다. 프로그램은 8 GPR와 기존 ISA만 사용한다. Phase 7 당시 FPGA/합성은 미실행이었다. 후속 Phase 8의 실제 직접 BRAM 합성/배치배선 결과는 20번 보고서를 따른다. 10,000장과 별도 모델 변환은 보류한다. Phase 7 보존 커밋은 94bb214이며 Phase 8 Commit/Push는 수행하지 않았다.
+
+## Phase 8 실행 결과 — 2026-11-24
+
+Phase 7 커밋 94bb214를 기준으로 phase8/direct-bram-inference-20261124에서 작업했다. 기존 04_rtl과 Legacy 프로젝트는 보존하고, 신규 FPGA Reset 경계와 재현 가능한 OOC Flow만 추가했다. BRAM 109.5/135타일과 기능 회귀는 PASS이며, 최종 상태는 **Timing Gate FAIL / 후속 승인 대기**다. [20번 보고서](20_phase8_report.md)에 실제 Timing/경고/로그와 후속 선택지를 기록했다. Commit/Push는 수행하지 않았다.
