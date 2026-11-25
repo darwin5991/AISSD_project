@@ -10,8 +10,40 @@
 /08_submission/*
 !/08_submission/.gitkeep
 
-# Local run outputs and model checkpoints
-/07_runs/
+# Local run outputs; retain only the selected passing NPU artifact packages.
+/07_runs/*
+!/07_runs/npu/
+/07_runs/npu/**
+!/07_runs/npu/README.md
+!/07_runs/npu/argmax_4105a01fb9/
+!/07_runs/npu/chain_3de93df10a/
+!/07_runs/npu/dma_9c0e67b2e2/
+!/07_runs/npu/dma_e2a1db6f61/
+!/07_runs/npu/gemm_913b7c97c7/
+!/07_runs/npu/gemm_9f3f342382/
+!/07_runs/npu/mnist_1_fc1_fc2_fc3_argmax_20261125_024139_b33a42/
+!/07_runs/npu/scalar_377ea75f5d/
+!/07_runs/npu/scalar_52cc5fe152/
+!/07_runs/npu/v100_20261125_024314_8859ab/
+!/07_runs/npu/v200f_20261125_024812_6bde90/
+!/07_runs/npu/v200_20261125_024439_4aec3b/
+!/07_runs/npu/v20_20261125_024243_a4c11b/
+!/07_runs/npu/v5_20261125_024215_8631ca/
+!/07_runs/npu/*/input/
+!/07_runs/npu/*/input/program.asm
+!/07_runs/npu/*/input/imem.hex
+!/07_runs/npu/*/input/dmem.hex
+!/07_runs/npu/*/output/
+!/07_runs/npu/*/output/results.hex
+!/07_runs/npu/*/scenario.json
+!/07_runs/npu/*/manifest.json
+!/07_runs/npu/*/reference.npz
+!/07_runs/npu/*/quantized.npz
+!/07_runs/npu/*/comparison.json
+!/07_runs/npu/*/expected.json
+!/07_runs/npu/*/summary.md
+
+# Original model checkpoint remains local.
 /03_model/checkpoints/
 
 # Local test files

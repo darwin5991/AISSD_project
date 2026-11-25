@@ -3,3 +3,7 @@
 07_runs/**/*.npz -text
 07_runs/**/*.vh -text
 05_tb/**/*.vh -text
+
+# Snapshot inputs/manifests are SHA-256-addressed. Keep their original bytes,
+# including CRLF, on every platform instead of applying core.autocrlf.
+07_runs/npu/** -text whitespace=cr-at-eol

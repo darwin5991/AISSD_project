@@ -1,0 +1,191 @@
+{
+  "regions": {
+    "W0": {
+      "base": 268435456,
+      "bytes": 117120,
+      "words": 29280
+    },
+    "W1": {
+      "base": 268552576,
+      "bytes": 117120,
+      "words": 29280
+    },
+    "W2": {
+      "base": 268669696,
+      "bytes": 117120,
+      "words": 29280
+    },
+    "W3": {
+      "base": 268786816,
+      "bytes": 117120,
+      "words": 29280
+    },
+    "Bias": {
+      "base": 268903936,
+      "bytes": 652,
+      "words": 163
+    },
+    "images": {
+      "base": 268904588,
+      "bytes": 15680,
+      "words": 3920
+    },
+    "results": {
+      "base": 268920268,
+      "bytes": 80,
+      "words": 20
+    }
+  },
+  "ops": {
+    "fc1": {
+      "weight_word": 0,
+      "bias_word": 0
+    },
+    "fc2": {
+      "weight_word": 25088,
+      "bias_word": 128
+    },
+    "fc3": {
+      "weight_word": 29184,
+      "bias_word": 160
+    }
+  },
+  "fields": {
+    "argmax": {
+      "offset": 0,
+      "bytes": 4,
+      "dtype": "uint32",
+      "logical": 1
+    }
+  },
+  "record_stride": 4,
+  "sample_ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "initial_words": 121223,
+  "dump": {
+    "base": 268920268,
+    "words": 20,
+    "file": "output/results.hex"
+  },
+  "checkpoint_sha256": "aaa85326d75d57f3ebe964e3cb75cff8e07a213e12fc967bf6f8b2988e3133bd",
+  "dataset_sha256": {
+    "t10k-images-idx3-ubyte": "0fa7898d509279e482958e8ce81c8e77db3f2f8254e26661ceb7762c4d494ce7",
+    "t10k-labels-idx1-ubyte": "ff7bcfd416de33731a308c3f266cc351222c34898ecbeaf847f06e48f7ec33f2"
+  },
+  "imem_words": 90,
+  "scenario": {
+    "name": "v20",
+    "sample_ids": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "save_outputs": [
+      "argmax"
+    ],
+    "ops": [
+      {
+        "id": "fc1",
+        "op": "gemm",
+        "k": 784,
+        "n": 512,
+        "src": "A",
+        "dst": "B",
+        "bias_shift": 3,
+        "out_shift": 10,
+        "relu": true
+      },
+      {
+        "id": "fc2",
+        "op": "gemm",
+        "k": 512,
+        "n": 128,
+        "src": "B",
+        "dst": "A",
+        "bias_shift": 1,
+        "out_shift": 7,
+        "relu": true
+      },
+      {
+        "id": "fc3",
+        "op": "gemm",
+        "k": 128,
+        "n": 10,
+        "src": "A",
+        "dst": "B",
+        "bias_shift": 2,
+        "out_shift": 7,
+        "relu": false
+      },
+      {
+        "id": "argmax",
+        "op": "argmax",
+        "src": "B",
+        "length": 10
+      }
+    ],
+    "checkpoint": "03_model/checkpoints/MLP_MNIST_GPU_FINAL_BEST.pth",
+    "timer": false,
+    "waveform": false,
+    "reuse_weights": true
+  },
+  "files_sha256": {
+    "reference.npz": "49913d2cf7bc16056715ecb91205fdf85494a855f4aa5c7bb066d0c0ad1d8437",
+    "quantized.npz": "b4a48cd114dcfac521b454410ea265654dbdb677247c583e1cbce9826b828306",
+    "scenario.json": "fd4fc7e8fd6f6c21b80762e34f2ee3039e3e0937ffc4c14f7686bce3d755ecee",
+    "input/program.asm": "7175f8f7cf5523a5bffe1b6425bd1326ff92a8ff6caf122d2059cbb18943025d",
+    "input/imem.hex": "fb1184ae8994f45a9ee8d54e34b48b7861572838b94abc1932883d0897bdf6f8",
+    "input/dmem.hex": "9e5aaf46cc6b773afcb913913c613fc3b5412aebbaea112ff351219df3897d91"
+  },
+  "git_head": "fb1aa35d83e4c3348e011e24a702c48cac4d5fc7",
+  "toolchain_sha256": {
+    "90_scripts/npu/assembler.py": "a8198826c53c8e3199d2ec081bf842afc2cf773396e82b77742aae81ec76f06e",
+    "90_scripts/npu/assembly_generator.py": "2a5051ca05fbba8f7625cbd115d7c56876ed7e752492108a518637f2b47bb9cd",
+    "90_scripts/npu/comparator.py": "eef772434dd6afff93589af6419c2b099ecf26a993df944f102b759ddaf8b33f",
+    "90_scripts/npu/memory_builder.py": "b672f623c7fc3730bb3624c42516c39003847e2b7cfbbc8e81f65c65bd991ebc",
+    "90_scripts/npu/model_loader.py": "fe534a38d00493dde7679e1f57398263453925c3eb9192f768785b53249f957c",
+    "90_scripts/npu/reference.py": "19b519549e321f9e9fb8c68fcfd5b23b351f3ca40549869f9a28db4a6642c1b1",
+    "90_scripts/npu/run_verification.py": "f9a8d5819224f638f6d03c61e225db4316f9aa507685705f0703d59c0d00adc3",
+    "90_scripts/npu/scenario.py": "0012bbb65f91f846578e120b3b86e080f8f7c3cd3173f16192c8c7a6bd724067",
+    "90_scripts/npu/simulator.py": "fecbe013caa98bfd97b2df33561c27e370a479e1ecd0a0cd295bdf752f4437e8",
+    "90_scripts/npu/smoke.py": "6f6a0b30964cdc27125242f9d54ab74c1d75c472e96745c9e782e946a65f1ba7"
+  },
+  "input_quantized_sha256": "c1820849141f563e1a7fd4d46055e7f496d0333594057fc0f6c0f6058543e5d6"
+}

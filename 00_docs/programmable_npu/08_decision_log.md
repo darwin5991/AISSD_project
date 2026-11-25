@@ -41,3 +41,9 @@ Recovery branch if applicable:
 ## D006 / 2026-11-25 / M10 source identity
 - Anchor5cf0429; power precheck rejected a string-key mismatch, not a content mismatch. Existing sim artifact paths contain Windows backslashes; FPGA manifest normalizes forward slashes. Independent audit found39/39 RTL SHA256 values identical after path normalization.
 - Normalize only dictionary path separators at lookup, then require exact SHA equality for every RTL source in each of six mandatory gates. Alternative rerun simulations or edit old evidence rejected because neither addresses the string-key cause. Preserve failed launcher log npu_m0/m10_power.log. Retry actual power and final integrity audit PASS; no hardware, constraints or expected arrays changed.
+
+## D007 / 2026-11-26 / user-requested local artifact commit
+- Anchor 4384cc2f6923aebd52dcfdafae5e7e7bb6e0460b, branch npu-v2/20261125. User explicitly requested committing the previously recommended 14 passing NPU run packages:108 files, about10.04MiB, including assembly, IMEM/DMEM, metadata, reference/quantized NPZ and external results/comparisons. This request overrides the earlier default of keeping these generated artifacts local/ignored.
+- Keep original bytes and existing run directories; allowlist these14 runs and known artifact filenames in .gitignore. Future runs, scalar_8e0ac731d5 without a completed comparison, logs, build caches, cleanup archives, original checkpoint/MNIST remain ignored. Assembler/generators already tracked and unchanged.
+- Add scoped -text attributes for NPU snapshots because manifest hashes cover ASM/JSON as well as HEX/NPZ. core.autocrlf=true must not change immutable snapshot bytes at staging/checkout. No reference, comparison, RTL, ISA or timing modification.
+- Validate package membership, exact file hashes, reassembly, existing external results and a Git index/checkout roundtrip before local commit; no simulation or FPGA rerun required for unchanged source/data. No push.
