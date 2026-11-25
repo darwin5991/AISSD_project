@@ -1,0 +1,21 @@
+{
+  "invocation": [
+    "90_scripts/npu/run_argmax_progress.py",
+    "--count",
+    "1000",
+    "--build",
+    "99_build/npu_argmax_progress_dda93806",
+    "--timeout",
+    "3600"
+  ],
+  "imem_words": 90,
+  "dmem_bytes": 1257132,
+  "watchdog_cycles": 50200000,
+  "timeout_seconds": 3600,
+  "accepted_starts": 1,
+  "weight_load_sets": 1,
+  "timer": false,
+  "waveform": false,
+  "progress_file": "output/results.hex.progress",
+  "progress_interval": 25
+}

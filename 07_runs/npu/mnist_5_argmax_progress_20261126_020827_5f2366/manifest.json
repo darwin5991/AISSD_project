@@ -1,0 +1,164 @@
+{
+  "regions": {
+    "W0": {
+      "base": 268435456,
+      "bytes": 117120,
+      "words": 29280
+    },
+    "W1": {
+      "base": 268552576,
+      "bytes": 117120,
+      "words": 29280
+    },
+    "W2": {
+      "base": 268669696,
+      "bytes": 117120,
+      "words": 29280
+    },
+    "W3": {
+      "base": 268786816,
+      "bytes": 117120,
+      "words": 29280
+    },
+    "Bias": {
+      "base": 268903936,
+      "bytes": 652,
+      "words": 163
+    },
+    "images": {
+      "base": 268904588,
+      "bytes": 3920,
+      "words": 980
+    },
+    "results": {
+      "base": 268908508,
+      "bytes": 20,
+      "words": 5
+    }
+  },
+  "ops": {
+    "fc1": {
+      "weight_word": 0,
+      "bias_word": 0
+    },
+    "fc2": {
+      "weight_word": 25088,
+      "bias_word": 128
+    },
+    "fc3": {
+      "weight_word": 29184,
+      "bias_word": 160
+    }
+  },
+  "fields": {
+    "argmax": {
+      "offset": 0,
+      "bytes": 4,
+      "dtype": "uint32",
+      "logical": 1
+    }
+  },
+  "record_stride": 4,
+  "sample_ids": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "initial_words": 118268,
+  "dump": {
+    "base": 268908508,
+    "words": 5,
+    "file": "output/results.hex"
+  },
+  "checkpoint_sha256": "aaa85326d75d57f3ebe964e3cb75cff8e07a213e12fc967bf6f8b2988e3133bd",
+  "dataset_sha256": {
+    "t10k-images-idx3-ubyte": "0fa7898d509279e482958e8ce81c8e77db3f2f8254e26661ceb7762c4d494ce7",
+    "t10k-labels-idx1-ubyte": "ff7bcfd416de33731a308c3f266cc351222c34898ecbeaf847f06e48f7ec33f2"
+  },
+  "imem_words": 90,
+  "scenario": {
+    "name": "mnist_5_argmax_progress",
+    "sample_ids": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "save_outputs": [
+      "argmax"
+    ],
+    "ops": [
+      {
+        "id": "fc1",
+        "op": "gemm",
+        "k": 784,
+        "n": 512,
+        "src": "A",
+        "dst": "B",
+        "bias_shift": 3,
+        "out_shift": 10,
+        "relu": true
+      },
+      {
+        "id": "fc2",
+        "op": "gemm",
+        "k": 512,
+        "n": 128,
+        "src": "B",
+        "dst": "A",
+        "bias_shift": 1,
+        "out_shift": 7,
+        "relu": true
+      },
+      {
+        "id": "fc3",
+        "op": "gemm",
+        "k": 128,
+        "n": 10,
+        "src": "A",
+        "dst": "B",
+        "bias_shift": 2,
+        "out_shift": 7,
+        "relu": false
+      },
+      {
+        "id": "argmax",
+        "op": "argmax",
+        "src": "B",
+        "length": 10
+      }
+    ],
+    "checkpoint": "03_model/checkpoints/MLP_MNIST_GPU_FINAL_BEST.pth",
+    "timer": false,
+    "waveform": false,
+    "reuse_weights": true
+  },
+  "files_sha256": {
+    "reference.npz": "26a0cab640a13594cca8b43f7e4b732d9a6712616ea244a3bfc656d1e8fd1260",
+    "quantized.npz": "c6435015abbb10970a46a7f6264290456bd5fe0c5b32dad954f76e3b5ad9ebbe",
+    "scenario.json": "111b0d25e53af2f76881e5841136a00cc6edc156bb59b399e523f954e61b380b",
+    "input/program.asm": "5f56ae8d1cf165cbb1134641f72c11f5d43aa5cb8d2ae372f8b55144eb1bbc17",
+    "input/imem.hex": "8a73e14bb05f0588aab3159b36d7d9d60648cc199730b1adffaec7e274834a8c",
+    "input/dmem.hex": "a521645d18b6e38453dbbd686604472a6209f5413177ed8e5a1f4df2af7bb54d"
+  },
+  "git_head": "47b3fa88644492a988d777d13076c29ad12d4deb",
+  "toolchain_sha256": {
+    "90_scripts/npu/additional_verification.py": "0bc951159afd42b96724729e0ca857fc96f14bf929f3c149bbb411e9905b509e",
+    "90_scripts/npu/assembler.py": "55634657ab7305bd5977cc5087f2897f72e1c79eeb7b6ef7c69a5f27cb5f02ca",
+    "90_scripts/npu/assembly_generator.py": "2a5051ca05fbba8f7625cbd115d7c56876ed7e752492108a518637f2b47bb9cd",
+    "90_scripts/npu/build_fpga.py": "59f88c3a3572a0b77560c51411dad46e5487ef1e349658f6d8c9958d6b0a39c2",
+    "90_scripts/npu/comparator.py": "eef772434dd6afff93589af6419c2b099ecf26a993df944f102b759ddaf8b33f",
+    "90_scripts/npu/memory_builder.py": "b672f623c7fc3730bb3624c42516c39003847e2b7cfbbc8e81f65c65bd991ebc",
+    "90_scripts/npu/model_loader.py": "fe534a38d00493dde7679e1f57398263453925c3eb9192f768785b53249f957c",
+    "90_scripts/npu/reference.py": "19b519549e321f9e9fb8c68fcfd5b23b351f3ca40549869f9a28db4a6642c1b1",
+    "90_scripts/npu/run_argmax_progress.py": "05e5797ddaa75162e716ecc4b2ec4ba3854b5035d55ab4e7b05b7387b9de2ddf",
+    "90_scripts/npu/run_verification.py": "f9a8d5819224f638f6d03c61e225db4316f9aa507685705f0703d59c0d00adc3",
+    "90_scripts/npu/scenario.py": "0012bbb65f91f846578e120b3b86e080f8f7c3cd3173f16192c8c7a6bd724067",
+    "90_scripts/npu/simulator.py": "c7a7a7e4a4fe301f4cfbb942ce46e2e66656b398b4b451de6037d628f32117ed",
+    "90_scripts/npu/smoke.py": "6f6a0b30964cdc27125242f9d54ab74c1d75c472e96745c9e782e946a65f1ba7"
+  },
+  "input_quantized_sha256": "52f80a4b655835fc53fa016d8534d73b409b17ebc647943b70fd543bd2d37e33"
+}

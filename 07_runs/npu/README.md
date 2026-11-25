@@ -1,6 +1,6 @@
 # Committed NPU simulation snapshots
 
-These are the 14 passing local simulation runs from 2026-11-25. The packages
+The original table lists 14 passing local simulation runs from 2026-11-25. The packages
 contain the original assembly, external IMEM/DMEM initialization, external
 result dumps and comparison data. Files were retained byte-for-byte; no model,
 reference, program or DUT result was regenerated for this commit.
@@ -63,9 +63,48 @@ For fresh integrated smoke runs:
 conda run -n aissd python 90_scripts/npu/smoke.py all
 ```
 
-Only these existing passing run IDs and known package filenames are allowed by
+Only the passing run IDs listed here and known package filenames are allowed by
 `.gitignore`. Future runs, the incomplete `scalar_8e0ac731d5` run, all `logs/`,
 `99_build/`, cleanup archives and original checkpoint/dataset remain local.
 Snapshot attributes disable newline conversion so manifest SHA-256 checks
 survive checkout on different platforms. No files in the snapshots are edited
 to accommodate checkout or DUT results.
+
+## Additional user-requested snapshots (2026-11-26)
+
+The following four passing runs are also committed at the user's request:
+
+| Run directory | Scope |
+|---|---|
+| `performance_5_20261126_014729_3fbbfc` | IDs 0-4, all layers + ARGMAX, 40 independent cycle snapshots |
+| `performance_weight_repeat_5_20261126_014739_7b8753` | Five repetitions of the five real weight/bias bank LOADs, 25 cycle snapshots |
+| `mnist_5_argmax_progress_20261126_020827_5f2366` | Five-image precheck of the external progress testbench |
+| `mnist_1000_argmax_progress_20261126_020901_8b1df2` | IDs 0-999, ARGMAX only; 1000/1000 match Python INT8, 991/1000 correct |
+
+These packages contain 59 original files, 8,559,817 bytes. They include the actual
+ASM, IMEM/DMEM HEX, scenario/layout manifests, immutable reference/quantized NPZ,
+external results and comparisons. CSVs, cycle dumps, progress counters and compact
+execution/source-hash JSON records are included where applicable. Files retain
+their original bytes under the existing `07_runs/npu/** -text` attributes.
+The cancelled 10000-image run, full text logs and build files remain local/ignored.
+
+The performance run's `output/combined_raw.hex` preserves the original 860-word
+external dump; `results.hex` and `timers.hex` are its result/timer slices. The helper
+has no inference output: its 25 result words are repeated bank LOAD measurements.
+For the ARGMAX runs, `output/results.hex.progress` records external result writes,
+while `predictions.csv` joins sample IDs, labels, Python INT8 and actual RTL values.
+`logs/simulator_sources.json` preserves compact source provenance; other logs are
+excluded. No checkpoint or dataset is packaged.
+
+The original comparator can read the inference snapshots without simulation:
+
+```powershell
+conda run -n aissd python 90_scripts/npu/run_verification.py compare --run 07_runs/npu/mnist_1000_argmax_progress_20261126_020901_8b1df2
+conda run -n aissd python 90_scripts/npu/run_verification.py compare --run 07_runs/npu/performance_5_20261126_014729_3fbbfc
+```
+
+These commands rewrite comparison/summary files, so inspect any resulting diff.
+See `00_docs/programmable_npu/11_performance_verification.md` and
+`13_mnist_1000_verification.md` for actual execution commands and scope. Source
+drivers and the dedicated external progress TB were committed before these
+snapshot packages; no new RTL simulation or FPGA run is required for packaging.
