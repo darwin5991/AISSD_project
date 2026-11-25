@@ -1,0 +1,6 @@
+sample_id,input_load_cycles,fc1_gemm_cycles,fc1_store_cycles,fc2_gemm_cycles,fc2_store_cycles,fc3_gemm_cycles,fc3_store_cycles
+0,198,25222,130,4134,34,105,5
+1,198,25222,130,4134,34,105,5
+2,198,25222,130,4134,34,105,5
+3,198,25222,130,4134,34,105,5
+4,198,25222,130,4134,34,105,5
