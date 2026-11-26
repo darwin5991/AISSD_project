@@ -1,0 +1,159 @@
+# Progress — update continuously
+## M0 actual preflight / 2026-11-25
+- PASS: new branch `npu-v2/20261125` from exact baseline `2e89b8e994982094a36172a3fd2f65d4a9edaff7`; initial tracked worktree clean; user untracked docs/AGENTS/ZIP preserved. No push.
+- Read AGENTS, all 00–07, baseline top, pipeline/read scheduler, MAC, accumulator, BRAM, ARGMAX, model/quantization and runner. No normative conflict identified.
+- `conda run -n aissd python -c ...` exit 0: Python 3.11.16, NumPy 2.4.6, PyTorch 2.11.0+cu128, strict model load and sample0 label 7. Checkpoint 1879001 bytes SHA256 matches normative hash. Test IDX available via baseline LayerViewer (download not used).
+- Evidence `99_build/npu_m0/environment.txt`; prior full tool/license preflight `99_build/preflight_5dd1565c7eba/evidence/report.txt`, git permission report `99_build/git_permission_recheck_fb3b7774df7d/report.txt`. D: free ~926 GiB. Vivado/XSim 2025.2 at D:/AMDDesignTools/2025.2/Vivado/bin, target xc7a100tcsg324-1.
+- Implementation files planned: `90_scripts/npu/*`, `04_rtl/isa/*`, new engine files under controller, `npu_memory_wrapper`/DMEM mux, `04_rtl/npu_top.sv`, `05_tb/npu/*`, NPU XDC/Tcl. Commands will be recorded as executed. Next M1. Repairs 0; recovery branches 0.
+The document author's original NOT RUN template is superseded by the observed gates below. Chronological evidence follows this table.
+
+| Gate | Status | Commit/source version | Evidence path | Notes |
+|---|---|---|---|---|
+| M0 preflight | PASS | 2bc8d0b | 99_build/npu_m0/environment.txt | Original preflight reused |
+| M1 toolchain foundations | PASS | 87a8b86 | 99_build/npu_m0/m1_tests.log | 4 tests; IDs0,1,7 golden equality |
+| M2 scalar IC | PASS | 53dfa24 | 07_runs/npu/scalar_377ea75f5d | 19/19 words |
+| M3 SRAM/DMA | PASS | 681be1b | 07_runs/npu/dma_e2a1db6f61 | 24/24 words, N+2 timer |
+| M4 GEMM | PASS | af16594 | 07_runs/npu/gemm_913b7c97c7 | 8/8 words, R+6 schedule |
+| M5 ARGMAX/timer/smoke | PASS | ad1a68c | 99_build/npu_m0/m5.log | Full top 77/77 words |
+| M6 V1 | PASS | fb1aa35 | 07_runs/npu/mnist_1_fc1_fc2_fc3_argmax_20261125_024139_b33a42 | 652 bytes+1 index |
+| M7 V5 | PASS | ab7f95d | 07_runs/npu/v5_20261125_024215_8631ca | 3260 bytes+5 indices |
+| M7 V20 | PASS | ab7f95d | 07_runs/npu/v20_20261125_024243_a4c11b | 20/20 |
+| M7 V100 | PASS | b29c8d0 | 07_runs/npu/v100_20261125_024314_8859ab | 100/100 |
+| M7 V200 | PASS | 72f48a1 | 07_runs/npu/v200_20261125_024439_4aec3b | 200/200 |
+| M7 V200F | PASS | 72f48a1 | 07_runs/npu/v200f_20261125_024812_6bde90 | 2400 bytes+200 indices |
+| M8 synthesis | PASS | e303caa+FPGA hashes | 99_build/npu_ooc_380ec37d39 | Synth WNS2.058ns; BRAM109.5/135 |
+| M9 post-route | PASS | 5086240 | 99_build/npu_ooc_380ec37d39/routed_gate.json | WNS0.312ns/WHS0.145ns; route7888/7888 |
+| M10 power/report | PASS | 0a94cce + final report commit | 99_build/npu_ooc_380ec37d39/routed_power.rpt; 10_final_report.md | 0.115W vectorless; final integrity PASS |
+
+## Current checkpoint
+- Branch/base: npu-v2/20261125 / 2e89b8e994982094a36172a3fd2f65d4a9edaff7
+- Last passing milestone / commit: M10 power/integrity / 0a94cce374539e78756e31cb910ab8553370dcc2
+- Current action: all required work complete; final report reviewed and committed at handoff
+- Retry attempts used / recovery branches used: 5 tooling repairs, 0 functional/timing repairs / 0
+- Next gate: none; 1000/10000 actual runs deferred to user
+- Blockers: none currently
+
+## Log template
+Date, gate, source SHA or diff hash, branch, files, exact commands, exit codes, result counts, log paths, issues, next steps. Append failure attempts as well as passes; never replace failing evidence with passing log. Update current checkpoint at each commit.
+
+## M1 foundations PASS / 2026-11-25
+- Anchor 2bc8d0b. Added modular scenario, baseline read-only loader, independent NumPy wrap32 reference, SRAM/DMEM layout, operation-based assembly generator and 24-instruction assembler.
+- Command `conda run -n aissd python -m unittest discover -s 90_scripts/npu/tests -v`; Python exit 0, 4/4 unittest methods PASS. Evidence `99_build/npu_m0/m1_tests.log` (PowerShell formats unittest stderr but unittest result OK).
+- 24 encoding cases plus LI boundaries/label expansion, signed packing/wrap, layout; existing generate_golden.py IDs 0,1,7 all-layer equality 1956 bytes, predicted [7,2,9]. Baseline outputs `99_build/baseline_golden_515a0fa671`, `baseline_golden_51dab8755a`, `baseline_golden_c526978256`.
+- Source reviewed for independent reference and expected-value isolation. No model/data changes. Next M2; repairs 0.
+
+## M2 scalar IC PASS / 2026-11-25
+- Anchor 87a8b86; exact 9-state IC with IF/ID, ID/EX, EX/MEM, MEM/WB, low-3-bit GPR addressing, packed CSR storage, WB commits, timer. New external-memory-only TB; temporary scalar harness excluded from final synthesis.
+- `conda run -n aissd python 90_scripts/npu/smoke.py scalar --build 99_build/npu_scalar_573340c9` exit 0. External DMEM 19/19 words equal; each result written once; END pulse/HALTED/restart ignored verified. Includes scalar arithmetic/logic/shift/wrap, LW/SW, packed CSR truncation/sign, x0, BEQ/BNE and JAL link.
+- Evidence `07_runs/npu/scalar_377ea75f5d`, simulator hashes/logs `99_build/npu_scalar_573340c9`, launcher log `99_build/npu_m0/m2_args_repair.log`.
+- Preserved tool failures: cf6d25d1 and a4fff9b0 unsupported xelab -O (first repair incorrectly changed argument; second removed unsupported switch); b01feb56 missing default timescale (fixed --timescale 1ns/1ps); scalar_8e0ac731d5 XSim batch '=' tokenization (fixed quoting complete key=value). No RTL result mismatch. Four substantive tool repairs total across three distinct blockers; no recovery branches. Next M3.
+
+## M3 SRAM/DMA PASS / 2026-11-25
+- Anchor 53dfa24; new per-bank owner mux, registered DMA read selector, unchanged 7 BRAM instances/depths/area decomposition. DMA RUN/DRAIN response/data/write pipeline, no extra active completion cycle. DMEM scalar/DMA mux.
+- `conda run -n aissd python 90_scripts/npu/smoke.py dma` exit 0, external 24/24 words exact. All seven banks; A/B last physical word, W/Bias multiword ending at final physical word; LOAD+STORE timer exactly 2*(N+2) each case. No duplicated/omitted external result writes.
+- Evidence `07_runs/npu/dma_e2a1db6f61`; log `99_build/npu_m0/m3.log`; exact source hashes in corresponding `99_build/npu_dma_*/source_hashes.json`. No new failures/repairs; total tool repairs 4, recovery 0. Next M4.
+
+## M4 GEMM PASS / 2026-11-25
+- Anchor 681be1b; final structural `npu_top` directly instantiates new IC/DMA/GEMM/ARGMAX/mux/wrapper and unchanged unpackers/MAC/accumulator. GEMM IDLE/PREP/RUN/DRAIN, start-local packed parameters, weight cursor, one group bubble, legacy delay taps 1/5/6 and delayed output group.
+- `conda run -n aissd python 90_scripts/npu/smoke.py gemm` exit 0; 8/8 external words exact over K=8/12, N=5/8/1, both ping-pong directions, signed random operands, positive/negative bias shifts, saturation/ReLU, padded lanes, nonzero input/W/bias/output bases. A output word190 exercises full 8-bit path.
+- GEMM timer observed through CSRR+SW equals G*Q+G+6 for all three cases (12,14,9). Results through STORE only. Evidence `07_runs/npu/gemm_913b7c97c7`; launcher `99_build/npu_m0/m4.log`. No arithmetic changes or result masks.
+- ARGMAX engine wired but NOT YET GATED; M5 next. Repairs unchanged 4; recovery 0.
+
+## M5 integrated smoke PASS / 2026-11-25
+- Anchor af16594. `conda run -n aissd python 90_scripts/npu/smoke.py all` exit 0; final full top compiled once, five programs, 77/77 external words exact: scalar19, DMA24, GEMM8, ARGMAX12, chain14.
+- `07_runs/npu/scalar_52cc5fe152`, `dma_9c0e67b2e2`, `gemm_9f3f342382`, `argmax_4105a01fb9`, `chain_3de93df10a`. Logs/source hashes under `99_build/npu_all_*`; launcher `99_build/npu_m0/m5.log`.
+- ARGMAX signed/ties/length1,5,10, both banks/nonzero offsets, padding ignored; timer retains DMA count across ARGMAX, TSTART clears count, ARGMAX/scalar excluded. DMA→GEMM→STORE→ARGMAX integrated on three small configurations. Timer overflow sticky wrap implemented and reviewed; no forced state/billion-cycle run.
+- All new validation uses external top buses and output memory only. Legacy leaf RTL byte-identical to baseline. No new failures; repairs4/recovery0. Next M6 V1 toolchain.
+
+## M6 V1 PASS / 2026-11-25
+- Anchor ad1a68c. Complete runner supports separate generate/simulate/compare and combined verify; assembler separate CLI. Immutable quantized/reference/program/input hashes, ordered sample IDs and per-range layout recorded in manifest. Comparator rejects format/unknown/length/hash mismatch and emits first mismatch address/raw/signed details; failed model comparisons automatically generate full-layer diagnostic program for failed original IDs. No observed mismatch.
+- Command `conda run -n aissd python 90_scripts/npu/run_verification.py verify --count 1 --save fc1,fc2,fc3,argmax` exit 0. Actual V1: FC1 512/512, FC2 128/128, FC3 12/12 including zero pads, ARGMAX1/1; each output word written once, one reset/start/END. Reference label match1/1.
+- Evidence `07_runs/npu/mnist_1_fc1_fc2_fc3_argmax_20261125_024139_b33a42`, log `99_build/npu_m0/v1.log`, exact build/source hashes in run/logs/simulator_sources.json. Test source version RTL af16594 (unchanged through ad1a68c), precommit Python hashes in manifest.
+- Committed declarative required scenario configs; generic --count/--ids/--save supports later 1000/10000. Repairs4/recovery0. Next M7 sequential gates.
+
+## M7 V5 and V20 PASS / 2026-11-25
+- Source fb1aa35, compiled full RTL source hash verification on reuse `99_build/npu_model_8cf69d59`.
+- `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v5.json --build 99_build/npu_model_8cf69d59`: exit0, FC1 2560/2560, FC2 640/640, FC3 60/60, ARGMAX5/5, zero mismatches. `07_runs/npu/v5_20261125_024215_8631ca`; launcher `99_build/npu_m0/v5.log`.
+- Same command with `v20.json`: exit0 ARGMAX20/20, no intermediate stores. `07_runs/npu/v20_20261125_024243_a4c11b`; launcher `99_build/npu_m0/v20.log`.
+- One weight-load set and image loop per scenario, all requested result words written once. No RTL changes or new repairs. Next V100/V200/V200F.
+
+## M7 V100 PASS / 2026-11-25
+- Source ab7f95d; command `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v100.json --build 99_build/npu_model_8cf69d59`, exit0. ARGMAX100/100; output write counts exact. Evidence `07_runs/npu/v100_20261125_024314_8859ab`; launcher `99_build/npu_m0/v100.log`. No intermediate FC stores.
+- Prepared OOC source/report scripts (not yet run, not gated). Runner watchdog cleanup strengthened to terminate only its owned Windows process tree on timeout and persist per-command args/exit code. Does not change RTL/reference/comparison; next required gate exercises launcher. Next V200. No new repair attempts.
+
+## M7 V200 and legacy datapath PASS / 2026-11-25
+- `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v200.json --build 99_build/npu_model_8cf69d59`, exit0, ARGMAX200/200. Source b29c8d0; unchanged RTL. Evidence `07_runs/npu/v200_20261125_024439_4aec3b`, `99_build/npu_m0/v200.log`.
+- Legacy leaf regression commands: `conda run -n aissd python 90_scripts/run.py mac_array --vivado-bin D:/AMDDesignTools/2025.2/Vivado/bin` and same `accumulator_postprocess`, process-local environment dirs `99_build/npu_legacy_{mac,acc}_env`. Both exit0. MAC265021/265021 vectors,1325105 checks,0 masked/errors; accumulator265019/265019 vectors/checks,0 masked/errors. Artifacts `07_runs/mac_array_xsim_20261124_174456_858512Z`, `07_runs/accumulator_postprocess_xsim_20261124_174456_858512Z`; launcher logs npu_m0/legacy_mac.log,legacy_acc.log. Old complete controller/top regression not run (new external-only gates replace them); all legacy source unchanged.
+- Final Python foundations rerun after operand-count validation and future capacity assertion: command same M1, `99_build/npu_m0/foundations_final.log`,4/4 PASS; baseline IDs0,1,7 all-layer equality. 10000-image allocation/program capacity ONLY tested:8349132 bytes, <128 IMEM words; no1000/10000 inference/reference accuracy run. Source additions do not alter any valid encoding.
+- No functional failure/diagnostic needed. Total tool repairs4/recovery0. Next V200F.
+
+## M7 V200F PASS / 2026-11-25
+- Source72f48a1, unchanged RTL hashes. `conda run -n aissd python 90_scripts/npu/run_verification.py verify --scenario 90_scripts/npu/scenarios/v200f.json --build 99_build/npu_model_8cf69d59` exit0. FC3 2400/2400 bytes including400 padding bytes; ARGMAX200/200; labels200/200 informational. Evidence `07_runs/npu/v200f_20261125_024812_6bde90`, `99_build/npu_m0/v200f.log`; per-tool args/exit0 recorded in build command JSON.
+- All mandatory functional gates PASS; no functional/reference mismatch or diagnostic rerun. Final RTL unchanged from af16594. No timing/power claim yet. Next M8 actual synth.
+
+## M8 synthesis PASS / 2026-11-25
+- Source e303caa plus exact precommit FPGA driver/Tcl/XDC hashes in `99_build/npu_ooc_380ec37d39/source_hashes.json`. `conda run -n aissd python 90_scripts/npu/build_fpga.py synth` exit0, bare NPU_SYNTH_COMPLETE, actual synth.dcp and all reports produced. Native Vivado2025.2 license acquired.
+- Synthesized npu_top, xc7a100tcsg324-1, OOC10ns, no exceptions. LUT5075/63400(8.00%), FF2180/126800(1.72%), RAMB36=104,RAMB18=11=>109.5/135tiles(81.11%); DSP0/240 (unchanged 8x8 multiply maps to LUTs under default synthesis). DistributedRAM0;11 LUT SRLs are pipeline metadata, not SRAM substitution. Hierarchy confirms all BRAM under u_memory; depths/decomposition retained.
+- Synthesis timing only: WNS2.058ns/TNS0, WHS0.214ns/THS0;7923 setup/hold endpoints. No_clock0, unconstrained_internal_endpoints0. Boundary no_input_delay66/no_output_delay101; clk HD.CLK_SRC not specified in OOC. NOT a post-route pass.
+- Synth DRC43 reported warnings, no errors: CFGBVS-1(1), CHECK-3(2 report limits), REQP-1839/1840(20 each, async reset/control into BRAM). Preserve required legacy async reset and report reset-release/IO scope; no suppressed warnings or invented board voltage. Benign unused inferred BRAM mux bits and EX/MEM wb_sel optimized; no latches.
+- Reviewed actual `synth_utilization.rpt`, `synth_utilization_hier.rpt`, `synth_timing_summary.rpt`, `synth_drc.rpt`, `synth_check_timing.rpt`, console. Launcher `99_build/npu_m0/m8.log`; tool command/exit JSON in build. Next M9 opt/place/phys_opt/route; no new repair.
+
+## M9 post-route PASS / 2026-11-25
+- Source5086240, same RTL as functional gates (af16594). `conda run -n aissd python 90_scripts/npu/build_fpga.py implement --run 99_build/npu_ooc_380ec37d39` exit0; actual opt_design/place_design/phys_opt_design/route_design, routed.dcp, all reports, bare NPU_ROUTE_TIMING_COMPLETE.
+- Routed WNS +0.312ns,TNS0,0/7923 setup endpoints failing; WHS+0.145ns,THS0,0/7923 hold endpoints failing; pulsewidth slack4.020ns,0/2421 failing. `routed_gate.json` also independently queries no negative setup/hold paths. check_timing: no_clock0,unconstrained_internal_endpoints0. 7888/7888 routable nets fully routed; routing errors0 (11111 logical nets,3223 no routing needed).
+- Routed LUT4910/63400(7.74%),FF2180/126800(1.72%),RAMB36=104,RAMB18=11=>109.5/135tiles81.11%,DSP0/240. LUT distributedRAM0,SRL11. No resource overflow. Worst setup output_shift_reg[4]→postprocess shift/saturation/mux→A BRAM DIBDI[0],9.363ns data(2.666logic+6.697route),11 logic levels. No RTL optimization/recovery/re-run necessary; first route passed.
+- Reports `99_build/npu_ooc_380ec37d39/routed_{timing_summary,critical_setup,critical_hold,route_status,utilization,utilization_hier,drc,clocks,check_timing}.rpt`. Launcher `99_build/npu_m0/m9.log`; command/exit0 JSON in build. DRC43 reported warnings as synth, default per-rule report limits noted; no error-severity DRC. OOC no_input_delay66/no_output_delay101, unset HD.CLK_SRC/HD.PARTPIN_LOCS and CFGBVS, async reset/control warnings retained; no board I/O/clock insertion/reset-release signoff claim. No false/multicycle paths, period remains10ns.
+- Next M10 routed power last, then final evidence/hash/report/clean tracked worktree. Tool repairs4, timing repairs0, recovery0.
+
+## M10 pre-power provenance repair / 2026-11-25
+- Source5cf0429; first power launcher rejected before Vivado invocation, `ValueError: functional/route source mismatch`. Exact command with six required run paths and traceback retained `99_build/npu_m0/m10_power.log`. No power report/run claimed.
+- Diagnosis: simulation source dictionary used Windows backslashes; FPGA dictionary uses forward slashes. Independent normalization command reports39 FPGA paths/42 sim paths and zero actual SHA mismatches (extra3 paths are external TB). Fix only consumer path key normalization, retains exact hash equality and all six required scenario checks. No artifacts/reference/RTL/constraints changed. Tool repair5 overall, this blocker attempt1; timing repairs0/recovery0. Next rerun same power gate with corrected path normalization.
+
+## M10 routed power and integrity PASS / 2026-11-25
+- Corrected path-key normalization, identical RTL/reference/constraints. Same power command with six full paths (see first attempt and retry launcher) exit0, bare NPU_POWER_COMPLETE. `99_build/npu_m0/m10_power_retry1.log`; actual `99_build/npu_ooc_380ec37d39/routed_power.rpt`, power_console.log, power_command.json, power_console.log.command.json. `functional_and_route_pass.json` proves all six comparisons and matching39 RTL hashes before power.
+- Power LAST after functionality/route: total0.115W,dynamic0.026W,static0.089W; vectorless/default activity, no VCD/SAIF, confidenceMedium, typical commercial,ambient25C,junction25.5C,default250LFM/medium heatsink/medium12–15layerboard thermal model. Not measured board or workload energy; BRAM activity estimate<0.001W demonstrates default enable/activity limitation. No numeric power threshold.
+- `conda run -n aissd python 99_build/npu_m0/audit_final.py` exit0; `final_integrity.json` and `final_audit.log` in npu_m0. Immutable program/data/reference/output hashes checked; same six weight/bias hashes across all runs; checkpoint/test IDX unchanged;39 routed RTL hashes equal each of six functional builds/currentsource; preserved legacy arithmetic/BRAM byte-identical to baseline; main still2e89b8e. Total required checks6312 layer bytes+526 full uint32 indices,2104 output words,zero mismatch. All counts include repeated scenarios, not unique images (200 unique).
+- No functional/timing repairs, no reference edits, no recovery branches. Tooling repairs5 total (last is path normalization, only1 attempt for that blocker). Final report/document review and final tracked-clean commit next; no further optional experiments or large inference runs.
+
+## Final documentation and handoff / 2026-11-25
+- Final code0a94cce374539e78756e31cb910ab8553370dcc2; report-only commit follows. `10_final_report.md` filled from actual comparisons/reports/audit; contains all unit/scenario counts, real paths/commands/hashes, routed utilization/setup/hold/DRC/coverage caveats, vectorless power assumptions, repair history, and future1000/10000/debug commands.
+- All M0–M10 gates satisfied. Final code tree clean at0a94cce; document review, `git diff --check`, staged diff review and final tracked-clean status checked for handoff. No further experiments, RTL/data/reference/constraint changes or push. Main remains pinned baseline. Required functionality complete; remaining items only explicitly deferred scope recorded in10.
+
+## User-requested simulation artifact commit / 2026-11-26
+- Anchor4384cc2f6923aebd52dcfdafae5e7e7bb6e0460b; user approved the recommended14 passing run packages. Assembler/generators remain tracked and unchanged. Explicit .gitignore run-ID/artifact allowlist exposes108 original files(10522066bytes), plus a package README. Incomplete scalar_8e0ac731d5, logs, all future runs, build/cache/archive/checkpoint/dataset remain ignored.
+- Added scoped byte-preserving attributes for NPU package ASM/JSON/HEX/NPZ and other snapshot files; no source/data/reference/result normalization or regeneration. Original108 file SHA256 values retained.
+- `conda run --no-capture-output -n aissd python 99_build/run_cleanup_review_20261126/validate_commit_packages.py prepare` exit0:14 programs/1555 reassembled instructions exactly equal IMEM; six exported MNIST package comparisons and eight smoke expected/actual comparisons PASS; ignore allowlist/exclusion probes PASS. Originals unchanged. Evidence `commit_prepare_validation.json`/`.log` and `commit_package_plan.json` in the same ignored review folder. This is artifact integrity/recomparison, not a new RTL simulation/timing run.
+- Next: stage only explicit package/config/doc paths, validate exact staged blob bytes and real checkout, review diff and local commit. No push.
+- Staged all113 intended paths only(108 artifacts + README +2 Git rules +2 records). Initial sandboxed git add was denied at .git/index.lock; authorized escalated Git execution succeeded without changing ACLs or global settings.
+- `conda run --no-capture-output -n aissd python 99_build/run_cleanup_review_20261126/validate_commit_packages.py index` exit0:108 staged blobs match original SHA256; actual git checkout-index export preserves all108 bytes/hashes; exported six model/eight smoke comparisons and1555-instruction reassembly PASS. Evidence `commit_index_validation.json`/`.log`. `git diff --cached --check` passed; staged paths/diff reviewed. Artifact commit leaves RTL/assembler/generator/model/dataset bytes unchanged and excludes local logs/builds/archives; no push. Final commit identity is reported in the handoff rather than embedded recursively.
+
+## Additional verification Test1 PASS / 2026-11-26
+- Anchor7a8d7fc; clean initial tree on existing requested branch. Read00-07, RTL timer/DMA/GEMM/top, software, original smoke and V1/V5/V200F evidence. Python aissd3.11.16, NumPy2.4.6, PyTorch2.11.0+cu128; approximately931GiB free. Existing snapshot42 source hashes match. No network or RTL changes.
+- New supplemental driver reuses all existing modules; actual performance command/log and both unique run IDs in11. Five image bodies emitted sequentially in one program; weights loaded once; separate helper repeats five loads five times. All65 timing snapshots match theory and external write-once checks pass. FC1/FC2/FC3=3260/3260 bytes, ARGMAX5/5, V5 output/reference identical.
+- Report11 and compact CSV/JSON record all values, statistics,100MHz active-engine times and utilization. Test1 simulator invocation wall times9.352037s and4.714643s. No failure/retry. Next full10000 reference/FP32 and single-program RTL gate, then12 and integrity audit.
+
+## Additional Test2 started / 2026-11-26 01:49 KST
+- Test1 gate committed47b3fa8. Running `conda run --no-capture-output -n aissd python 90_scripts/npu/additional_verification.py full --build 99_build/npu_model_8cf69d59 --timeout 21600`; launcher99_build/additional_20261126/full.log; new run07_runs/npu/mnist_10000_argmax_20261126_014859_1e53d4. No split, timer or waveform. Pre-simulation memory/watchdog/FP32 metadata in run/pre_simulation.json.
+- Independent full INT8 reference9929/10000 correct(99.29%); CPU FP32 export9932/10000(99.32%), differing IDs1522,1697,5199. RTL completion/comparison pending at this entry; do not call it PASS before actual completion.
+- Continuation: owned terminal session89406; poll completion, then run `conda run --no-capture-output -n aissd python 99_build/additional_20261126/audit_additional.py` (redirect integrity.log). If completed full_analysis passes, run prepared99_build/additional_20261126/finish_report.py to write12/completion09; review outputs, source/data preservation and Git diff, stage only new compact evidence/source/docs and local commit. Do not push or modify baseline RTL/TB/scripts/results. These helper scripts are ignored local automation and must not be run before full completion.
+
+## Additional Test2 STOPPED BY USER / 2026-11-26
+- User explicitly requested stopping the active full MNIST simulation. Terminated only owned XSim kernel PID3776 and its child; wrapper exit is recorded in99_build/additional_20261126/full.log. No RTL completion, output comparison, Test2 PASS or exact completed-image count is claimed. All generated inputs, references, FP32 predictions and logs remain preserved in07_runs/npu/mnist_10000_argmax_20261126_014859_1e53d4; stopped_by_user.json records cancellation. Test1 remains PASS at local commit47b3fa8. No further verification, audit, report12 generation or commit performed after stop request. Existing uncommitted documentation corrections/progress are preserved. No push.
+
+
+## User-requested1000 started / 2026-11-26
+- Previous10000 run remains stopped/preserved. New dedicated external-only progress TB leaves original RTL and TB unchanged; observes ordered external ARGMAX writes and records completed/total every25 images. No internal DUT probing, timer, waveforms, intermediate output stores or hardware change.
+- Actual five-image TB precheck PASS: `conda run --no-capture-output -n aissd python 90_scripts/npu/run_argmax_progress.py --count 5 --timeout 1200`; log99_build/additional_20261126/progress_tb_5.log; run07_runs/npu/mnist_5_argmax_progress_20261126_020827_5f2366, snapshot99_build/npu_argmax_progress_dda93806. ARGMAX5/5 exact, progress0 then5, native completion/write-once checks pass.
+- Requested run command: `conda run --no-capture-output -n aissd python 90_scripts/npu/run_argmax_progress.py --count 1000 --build 99_build/npu_argmax_progress_dda93806 --timeout 3600`; log99_build/additional_20261126/mnist_1000.log; new run07_runs/npu/mnist_1000_argmax_progress_20261126_020901_8b1df2; owned terminal session49568, XSim kernel9560. Single program IDs0..999, weights once, one reset/start/END, external ARGMAX-only. Actual progress: run/output/results.hex.progress. Completion/comparison pending; do not call PASS before completion.
+
+## User-requested1000 PASS / 2026-11-26
+- Actual requested single-program run completed with native exit0/NPU_EXTERNAL_PASS. ARGMAX1000/1000 exact matches vs unchanged Python INT8 Reference,0 mismatches/missing/duplicate/XZ/out-of-range. Python INT8 and RTL each991/1000 correct(99.10%); simulator invocation wall656.739618s. Exact external progress0,25,...,1000.
+- Report13 records actual commands, unique run/build paths, scope, capacities and runtime. CSV and compact summary/integrity JSON under docs/evidence/additional_20261126. finish_1000.py integrity/report audit PASS; original39 RTL/routed hashes,42 compiled hashes, checkpoint/IDX and original tracked model/software/TB/run files unchanged. Cancelled10000 run remains stopped/preserved; not reported PASS. No FPGA rerun or push.
+- Final review: report/source diff reviewed; raw HEX/NPZ/log/build paths remain ignored. New driver and external-only TB were tested by the actual5- and1000-image runs. Final explicit staging/diff check/local commit complete this gate; final commit SHA is reported in the handoff.
+
+## User-requested additional snapshot packaging / 2026-11-26
+- Anchor8dbe978; initially clean worktree. User requests committing the1000- and earlier five-image simulation artifacts. Selected four passing related runs (performance5, repeated weight/bias helper, progress-TB5, ARGMAX1000),59 files/8559817 bytes. Exact allowlist added; existing -text attributes retain original bytes. Full logs/builds/cancelled10000/checkpoint/dataset remain ignored.
+- `conda run --no-capture-output -n aissd python 99_build/additional_20261126/package_review.py prepare` exit0; original manifest hashes,830 reassembled instructions, inference/reference and65 timer snapshots verified. Existing comparisons PASS; future-run/cancelled10000/full-log ignore probes PASS. This is integrity/recomparison of recorded outputs, not a new simulation. Plan/original SHA256 values at99_build/additional_20261126/package_review/plan.json; launcher package_prepare.log.
+- Next: stage only the59 original artifact files and four Git/doc paths, verify exact index and checkout bytes, review diff, then local commit. No push.
+- First index check verified all59 staged blob SHA256 values, then checkout-index rejected newline-delimited Windows text stdin paths (CRLF). Original/staged files are unchanged; failure log package_index.log retained. Retry uses Git's NUL-delimited binary path input (-z) and a new export directory, preserving the first attempt. No simulation/reference/expectation change.
+- Retry index/checkout validation exit0:59 staged blobs and59 actual checkout-index exports match original SHA256 byte-for-byte; all four exported programs/references/results/cycles revalidated. Exactly63 staged paths (59 original artifacts + .gitignore/README/08/09),8559817 artifact bytes. Evidence package_review/verified.json and package_index_retry1.log. Diff/ignore boundaries reviewed; no original artifact, RTL, software arithmetic, model or dataset changed. Local artifact commit follows; final SHA is reported in handoff. No push.

@@ -60,3 +60,32 @@ Tcl은 원본 소스를 참조하며 복사하지 않는다. 기존 출력 폴�
 - [설계 명세](../00_docs/architecture.md), 3절 및 6.3절.
 
 기존 합성·배치배선 checkpoint는 이전 2단 구조의 산출물이다. `.xpr`는 수정한 원본 RTL을 참조하므로 새 구조의 결과를 얻으려면 기능 검증 후 재합성이 필요하다. 이번에는 RTL 코드만 수정했고 새 데이터는 앞선 생성 단계에서 준비했다. 기능 검증·재합성·배치배선은 각각 별도 요청을 받아 진행한다. 이번 개정에서 OOC 클럭 위치, 입출력 지연, reset 안전성 또는 DSP 강제 사용을 새로 확정하지 않았다.
+
+# Programmable NPU v2 OOC execution
+
+From repository root, after all six functional scenarios pass:
+
+```powershell
+conda run -n aissd python 90_scripts/npu/build_fpga.py synth
+conda run -n aissd python 90_scripts/npu/build_fpga.py implement --run 99_build/npu_ooc_<id>
+conda run -n aissd python 90_scripts/npu/build_fpga.py power --run 99_build/npu_ooc_<id> --functional-runs <V1-run> <V5-run> <V20-run> <V100-run> <V200-run> <V200F-run>
+```
+
+The wrapper runs `06_fpga/tcl/build_npu_ooc.tcl` using native Vivado 2025.2,
+process-local XILINX_LOCAL_USER_DATA=no and APPDATA/TEMP/TMP under its unique
+ignored build directory. No global settings changed. It records source hashes,
+tool command/exit codes, synth and routed DCPs, utilization/hierarchy, setup/hold
+summary and critical paths, DRC, clocks/check_timing and route status.
+
+Top `npu_top`, `xc7a100tcsg324-1`, OOC, 10ns `npu_clk`, no false/multicycle
+exceptions. Synthesis uses rebuilt hierarchy; implementation runs opt/place/
+phys_opt/route with default directives, maxThreads6. Internal setup and hold
+must pass after actual routing. External IMEM/DMEM and TB are excluded. Board
+pins, external I/O delays and asynchronous reset recovery/removal are outside
+this OOC scope; inspect unconstrained paths instead of claiming board timing.
+
+Power runs last on the routed DCP; requires six passing functional comparison
+artifacts and matching RTL source hashes plus a passing routed timing gate.
+Report is a vectorless/default activity estimate, not measured board power.
+Do not run it as a substitute for functional or routed timing validation.
+Actual metrics/paths are in `00_docs/programmable_npu/10_final_report.md`.

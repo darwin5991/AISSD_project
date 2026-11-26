@@ -1,0 +1,19 @@
+{
+  "invocation": [
+    "90_scripts/npu/run_argmax_progress.py",
+    "--count",
+    "5",
+    "--timeout",
+    "1200"
+  ],
+  "imem_words": 90,
+  "dmem_bytes": 473072,
+  "watchdog_cycles": 450000,
+  "timeout_seconds": 1200,
+  "accepted_starts": 1,
+  "weight_load_sets": 1,
+  "timer": false,
+  "waveform": false,
+  "progress_file": "output/results.hex.progress",
+  "progress_interval": 25
+}

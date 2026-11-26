@@ -1,0 +1,104 @@
+"""External-only ISA/engine smoke; expected values determined before simulation."""
+from pathlib import Path
+import argparse,json,uuid
+from assembler import assemble,write_hex
+from simulator import ROOT,compile_sim,simulate
+
+def run_case(name,asm,expected,data=None,build=None):
+    run=ROOT/'07_runs/npu'/f'{name}_{uuid.uuid4().hex[:10]}'
+    for sub in ('input','output','logs'): (run/sub).mkdir(parents=True)
+    words=assemble(asm);base=0x10001000
+    init=[0]*1024+[0xa5a5a5a5]*len(expected)
+    for addr,value in (data or {}).items():init[(addr-0x10000000)//4]=value
+    (run/'input/program.asm').write_text(asm);write_hex(run/'input/imem.hex',words);write_hex(run/'input/dmem.hex',init)
+    (run/'expected.json').write_text(json.dumps(expected))
+    simulate(build,run,len(words),len(init),base,len(expected))
+    lines=(run/'output/results.hex').read_text().splitlines()
+    actual=[int(x,16) for x in lines]
+    (run/'comparison.json').write_text(json.dumps(dict(expected=expected,actual=actual,passed=actual==expected),indent=2))
+    if actual!=expected:raise AssertionError(str(run)+' '+str(actual)+' expected '+str(expected))
+    print(name,'PASS',len(expected),'words',run)
+    return run
+
+def scalar(build):
+    a=['LI x6,0x10001000'];e=[]
+    def save(code,val):
+        a.extend(code.splitlines());a.append(f'SW x1,{4*len(e)}(x6)');e.append(val&0xffffffff)
+    save('LUI x1,0x12345',0x12345000)
+    save('LI x2,-1\nADDI x3,x0,1\nADD x1,x2,x3',0)
+    save('ADDI x1,x2,-2',0xfffffffd)
+    save('LI x2,0x5678\nLI x3,0x1234\nAND x1,x2,x3',0x1230)
+    save('OR x1,x2,x3',0x567c)
+    save('ANDI x1,x2,0x7f',0x78)
+    save('ORI x1,x0,-2048',0xfffff800)
+    save('LI x2,0x80000001\nSLLI x1,x2,1',2)
+    save('SRLI x1,x2,31',1)
+    save('ADDI x0,x2,2\nADD x1,x0,x0',0)
+    save('LI x2,0x10000000\nLI x3,0x87654321\nSW x3,4(x2)\nLW x1,4(x2)',0x87654321)
+    save('SETI GEMM_DIM,-1\nCSRR x1,GEMM_DIM',0x1fffff)
+    save('LI x2,0x12345abc\nCSRW GEMM_CFG,x2\nCSRR x1,GEMM_CFG',0xabc)
+    save('SETI ARG_LEN,-2\nCSRR x1,ARG_LEN',14)
+    save('SETI SRC0_BASE,-4096\nCSRR x1,SRC0_BASE',0xfffff000)
+    save('CSRR x1,STATUS',0)
+    save('TSTART\nADDI x1,x0,3\nTSTOP\nCSRR x1,PERF_COUNT',0)
+    a+=['LI x1,0','LI x2,3','loop: ADDI x1,x1,1','BNE x1,x2,loop','BEQ x1,x2,taken','ADDI x1,x0,99','taken: BEQ x1,x0,bad','BNE x1,x2,bad',f'SW x1,{len(e)*4}(x6)'];e.append(3)
+    # Link expected from actual expanded PC, independently checked by subsequent arithmetic.
+    a+=['JAL x3,link','bad: ADDI x1,x0,99','link: ADDI x1,x3,0',f'SW x1,{len(e)*4}(x6)','END']
+    words=assemble('\n'.join(a));jal_pc=next(i*4 for i,w in enumerate(words) if w&127==0x6f);e.append(jal_pc+4)
+    return run_case('scalar','\n'.join(a),e,build=build)
+def dma(build):
+    a=['LI x6,0x10001000'];e=[];data={}
+    for bank,offset in [(0,780),(1,508),(2,117108),(3,117108),(4,117108),(5,117108),(6,640)]:
+        count=1 if bank<2 else 3
+        pattern=[(0x807f00ff+bank*0x10203+i*0x1234567)&0xffffffff for i in range(count)]
+        for i,w in enumerate(pattern):data[0x10000000+bank*16+i*4]=w
+        a+=['TSTART',f'LI x1,{0x10000000+bank*16}',f'LI x2,{0x80000000+bank*0x20000+offset}',f'LI x3,{count*4}',
+            'LOAD x1,x2,x3','ADDI x1,x2,0',f'ADDI x2,x6,{len(e)*4}','STORE x1,x2,x3','TSTOP','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+count)*4}(x6)']
+        e+=pattern+[2*(count+2)]
+    a+=['END'];return run_case('dma','\n'.join(a),e,data,build)
+def gemm(build,integrated=False):
+    import numpy as np
+    from reference import gemm as math_gemm
+    from memory_builder import pack8,BANKS
+    a=['LI x6,0x10001000'];e=[];data={};cursor=0x10000000
+    def load_words(words,dest):
+        nonlocal cursor
+        for i,w in enumerate(words):data[cursor+4*i]=int(w)
+        a.extend([f'LI x1,{cursor}',f'LI x2,{dest}',f'LI x3,{4*len(words)}','LOAD x1,x2,x3']);cursor+=4*len(words)
+    rng=np.random.default_rng(20261125)
+    for k,n,src,dst,bs,os,relu,io,oo in [(8,5,'A','B',-1,0,False,12,16),(12,8,'B','A',3,2,True,8,760),(8,1,'A','B',2,7,False,0,0)]:
+        g=(n+3)//4;x=rng.integers(-128,128,k,dtype=np.int16).astype(np.int8)
+        w=rng.integers(-128,128,(n,k),dtype=np.int16).astype(np.int8);b=rng.integers(-128,128,n,dtype=np.int16).astype(np.int8)
+        yp=np.pad(math_gemm(x,w,b,bs,os,relu),(0,4*g-n));wp=np.pad(w,((0,4*g-n),(0,0)));bp=np.pad(b,(0,4*g-n))
+        load_words(pack8(x),BANKS[src]+io)
+        for j in range(4):load_words(pack8(wp[j::4]),BANKS['W'+str(j)]+20)
+        load_words(pack8(bp),BANKS['Bias']+12)
+        a += [f'SETADDR SRC0_BASE,{BANKS[src]+io}',f'SETADDR SRC1_BASE,{BANKS["W0"]+20}',f'SETADDR DST_BASE,{BANKS[dst]+oo}',
+              f'SETADDR BIAS_BASE,{BANKS["Bias"]+12}',f'SETADDR GEMM_DIM,{(1<<20)|(n<<10)|k}',f'SETI GEMM_CFG,{int(relu)*2048+os*64+(bs&63)}',
+              'TSTART','EXEC GEMM','TSTOP',f'LI x1,{BANKS[dst]+oo}',f'ADDI x2,x6,{len(e)*4}',f'LI x3,{g*4}','STORE x1,x2,x3','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+g)*4}(x6)']
+        e += [int(v) for v in pack8(yp)]+[g*(k//4)+g+6]
+        if integrated:
+            a += [f'SETADDR ARG_SRC,{BANKS[dst]+oo}',f'SETI ARG_LEN,{min(n,10)}','TSTART','EXEC ARGMAX,x1',f'SW x1,{len(e)*4}(x6)',
+                  'TSTOP','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+1)*4}(x6)']
+            e += [int(np.argmax(yp[:min(n,10)])),0]
+    a+=['END'];return run_case('chain' if integrated else 'gemm','\n'.join(a),e,data,build)
+def argmax(build):
+    from memory_builder import pack8
+    a=['LI x6,0x10001000'];e=[];data={}
+    for i,(values,length,bank) in enumerate([([-128,127,127,0,126,-1,4,5,6,7,127,127],10,0x80000010),
+             ([-3,-2,-1,-1,-4,-5,-6,-7,-8,-9,127,127],10,0x80020020),([-128,127,127,127],1,0x80000000),
+             ([-5,-4,-3,-2,100,100,-1,0],5,0x80020004)]):
+        words=pack8(values);src=0x10000000+i*64
+        for j,w in enumerate(words):data[src+j*4]=int(w)
+        a += [f'LI x1,{src}',f'LI x2,{bank}',f'LI x3,{len(words)*4}','TSTART','LOAD x1,x2,x3','TSTOP',
+              f'SETADDR ARG_SRC,{bank}',f'SETI ARG_LEN,{length}','EXEC ARGMAX,x1',f'SW x1,{len(e)*4}(x6)',
+              'CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+1)*4}(x6)','TSTART','EXEC ARGMAX,x1','TSTOP','CSRR x1,PERF_COUNT',f'SW x1,{(len(e)+2)*4}(x6)']
+        e += [values.index(max(values[:length])),len(words)+2,0]
+    a+=['END'];return run_case('argmax','\n'.join(a),e,data,build)
+if __name__=='__main__':
+    p=argparse.ArgumentParser();p.add_argument('gate',choices=['scalar','dma','gemm','argmax','all']);p.add_argument('--build');args=p.parse_args()
+    mode={'scalar':False,'dma':'dma'}.get(args.gate,True)
+    b=Path(args.build) if args.build else compile_sim(ROOT/'99_build'/('npu_'+args.gate+'_'+uuid.uuid4().hex[:8]),mode)
+    if args.gate=='all':
+        scalar(b);dma(b);gemm(b);argmax(b);gemm(b,True)
+    else: {'scalar':scalar,'dma':dma,'gemm':gemm,'argmax':argmax}[args.gate](b)

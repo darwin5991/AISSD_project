@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "count": 1000,
+  "matches": 1000,
+  "mismatches": 0,
+  "python_int8_correct": 991,
+  "rtl_correct": 991,
+  "simulation_wall_seconds": 656.7396179,
+  "total_wall_seconds": 657.5478338999999,
+  "run": "07_runs\\npu\\mnist_1000_argmax_progress_20261126_020901_8b1df2",
+  "build": "99_build\\npu_argmax_progress_dda93806",
+  "checkpoint_sha256": "aaa85326d75d57f3ebe964e3cb75cff8e07a213e12fc967bf6f8b2988e3133bd",
+  "dataset_sha256": {
+    "t10k-images-idx3-ubyte": "0fa7898d509279e482958e8ce81c8e77db3f2f8254e26661ceb7762c4d494ce7",
+    "t10k-labels-idx1-ubyte": "ff7bcfd416de33731a308c3f266cc351222c34898ecbeaf847f06e48f7ec33f2"
+  },
+  "output_sha256": "d02e2e35a0f280140697e85f2e63293c140a770e153dc615138b72eeaad6eff7",
+  "predictions_sha256": "db49e8ffaa5bdf6602d914789c7a142c7b9b58745e97bd35074cf517d0067a5f",
+  "git_head": "47b3fa88644492a988d777d13076c29ad12d4deb"
+}

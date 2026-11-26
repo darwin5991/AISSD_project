@@ -1,0 +1,38 @@
+mnist_1_fc1_fc2_fc3_argmax: PASS
+
+{
+  "passed": true,
+  "fields": {
+    "fc1": {
+      "total": 512,
+      "matches": 512,
+      "mismatches": 0,
+      "first": []
+    },
+    "fc2": {
+      "total": 128,
+      "matches": 128,
+      "mismatches": 0,
+      "first": []
+    },
+    "fc3": {
+      "total": 12,
+      "matches": 12,
+      "mismatches": 0,
+      "first": []
+    },
+    "argmax": {
+      "total": 1,
+      "matches": 1,
+      "mismatches": 0,
+      "first": []
+    }
+  },
+  "sample_ids": [
+    0
+  ],
+  "mismatching_sample_ids": [],
+  "output_sha256": "8e71fc33587037bcd14178c6fb76b38f604355a0bcf0902aa75148ad3936ef52",
+  "reference_label_matches": 1,
+  "label_count": 1
+}

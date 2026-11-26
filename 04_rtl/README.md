@@ -77,3 +77,18 @@ The current simulation source lists are in ../90_scripts/sim_targets.json. They
 have been updated for the new data lengths and delays. New headers are available;
 RTL edits still require separately authorized tests and simulation. The runner
 rejects old headers instead of reusing previous data silently.
+
+# Programmable NPU v2
+
+`npu_top.sv` is the new ISA-controlled synthesis top; contracts are in
+`00_docs/programmable_npu/01_isa_spec.md` and `02_architecture.md`.
+The 9-state IC and scalar leaf modules are under `isa/`; independent DMA,
+GEMM and ARGMAX controllers are in `controller/`. `npu_memory_wrapper`
+provides owner-selected per-bank ports and a registered DMA read selector.
+The existing `memory_wrapper` and `mlp_top` interfaces remain legacy.
+
+Unchanged MAC/accumulator/common/unpacker/BRAM/ARGMAX arithmetic is instantiated
+directly by the new hierarchy. No fault/status expansion or internal TB ports.
+Use the explicit source list from `90_scripts/npu/simulator.py:sources` for the
+new target; do not indiscriminately compile both temporary `dma_harness` and
+the real top. NPU usage: `90_scripts/npu/README.md`.

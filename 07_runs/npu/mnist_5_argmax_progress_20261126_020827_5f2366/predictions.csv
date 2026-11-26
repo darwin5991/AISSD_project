@@ -1,0 +1,6 @@
+sample_id,ground_truth,python_int8_argmax,rtl_argmax,int8_rtl_match
+0,7,7,7,1
+1,2,2,2,1
+2,1,1,1,1
+3,0,0,0,1
+4,4,4,4,1

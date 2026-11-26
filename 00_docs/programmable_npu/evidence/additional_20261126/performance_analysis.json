@@ -1,0 +1,219 @@
+{
+  "passed": true,
+  "inference_run": "07_runs\\npu\\performance_5_20261126_014729_3fbbfc",
+  "helper_run": "07_runs\\npu\\performance_weight_repeat_5_20261126_014739_7b8753",
+  "inference_wall_seconds": 9.352037400000029,
+  "helper_wall_seconds": 4.714643099999989,
+  "initial_load_cycles": [
+    29282,
+    29282,
+    29282,
+    29282,
+    165
+  ],
+  "image_cycles": [
+    [
+      198,
+      25222,
+      130,
+      4134,
+      34,
+      105,
+      5
+    ],
+    [
+      198,
+      25222,
+      130,
+      4134,
+      34,
+      105,
+      5
+    ],
+    [
+      198,
+      25222,
+      130,
+      4134,
+      34,
+      105,
+      5
+    ],
+    [
+      198,
+      25222,
+      130,
+      4134,
+      34,
+      105,
+      5
+    ],
+    [
+      198,
+      25222,
+      130,
+      4134,
+      34,
+      105,
+      5
+    ]
+  ],
+  "repeated_load_cycles": [
+    [
+      29282,
+      29282,
+      29282,
+      29282,
+      165
+    ],
+    [
+      29282,
+      29282,
+      29282,
+      29282,
+      165
+    ],
+    [
+      29282,
+      29282,
+      29282,
+      29282,
+      165
+    ],
+    [
+      29282,
+      29282,
+      29282,
+      29282,
+      165
+    ],
+    [
+      29282,
+      29282,
+      29282,
+      29282,
+      165
+    ]
+  ],
+  "expected": {
+    "banks": [
+      29282,
+      29282,
+      29282,
+      29282,
+      165
+    ],
+    "image": [
+      198,
+      25222,
+      130,
+      4134,
+      34,
+      105,
+      5
+    ],
+    "layers": [
+      {
+        "layer": "fc1",
+        "k": 784,
+        "n": 512,
+        "q": 196,
+        "g": 128,
+        "useful_multiplies": 401408,
+        "padded_multiplies": 401408,
+        "useful_ideal_cycles": 25088.0,
+        "padded_ideal_cycles": 25088,
+        "expected_cycles": 25222,
+        "bubble_cycles": 127,
+        "prep_cycles": 1,
+        "drain_cycles": 6,
+        "measured_cycles": 25222,
+        "useful_utilization": 0.9946871778605979,
+        "padding_efficiency": 1.0,
+        "schedule_efficiency": 0.9946871778605979,
+        "overhead_cycles": 134
+      },
+      {
+        "layer": "fc2",
+        "k": 512,
+        "n": 128,
+        "q": 128,
+        "g": 32,
+        "useful_multiplies": 65536,
+        "padded_multiplies": 65536,
+        "useful_ideal_cycles": 4096.0,
+        "padded_ideal_cycles": 4096,
+        "expected_cycles": 4134,
+        "bubble_cycles": 31,
+        "prep_cycles": 1,
+        "drain_cycles": 6,
+        "measured_cycles": 4134,
+        "useful_utilization": 0.9908079342041606,
+        "padding_efficiency": 1.0,
+        "schedule_efficiency": 0.9908079342041606,
+        "overhead_cycles": 38
+      },
+      {
+        "layer": "fc3",
+        "k": 128,
+        "n": 10,
+        "q": 32,
+        "g": 3,
+        "useful_multiplies": 1280,
+        "padded_multiplies": 1536,
+        "useful_ideal_cycles": 80.0,
+        "padded_ideal_cycles": 96,
+        "expected_cycles": 105,
+        "bubble_cycles": 2,
+        "prep_cycles": 1,
+        "drain_cycles": 6,
+        "measured_cycles": 105,
+        "useful_utilization": 0.7619047619047619,
+        "padding_efficiency": 0.8333333333333334,
+        "schedule_efficiency": 0.9142857142857143,
+        "overhead_cycles": 9
+      }
+    ]
+  },
+  "comparison": {
+    "passed": true,
+    "fields": {
+      "fc1": {
+        "total": 2560,
+        "matches": 2560,
+        "mismatches": 0,
+        "first": []
+      },
+      "fc2": {
+        "total": 640,
+        "matches": 640,
+        "mismatches": 0,
+        "first": []
+      },
+      "fc3": {
+        "total": 60,
+        "matches": 60,
+        "mismatches": 0,
+        "first": []
+      },
+      "argmax": {
+        "total": 5,
+        "matches": 5,
+        "mismatches": 0,
+        "first": []
+      }
+    },
+    "sample_ids": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "mismatching_sample_ids": [],
+    "output_sha256": "95ca4b970789c13398af7d82a7a2072b5a673cdc845f19bd5f2bf750cbc25d07",
+    "reference_label_matches": 5,
+    "label_count": 5
+  },
+  "original_v5_output_identical": true
+}
